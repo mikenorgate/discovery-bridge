@@ -19,7 +19,7 @@ from test_query import query
 
 async def exercise(collector, broker, broker_command, processes, start):
     pod = endpoint('discovery-pod', 6, 'fd00:5353::2')
-    lan = endpoint('device', 4, '10.22.0.2')
+    lan = endpoint('device', 4, '198.18.22.2')
     observed, transmitted, exported = Counter(), Counter(), []
     positive, goodbyes = [], []
     running = True

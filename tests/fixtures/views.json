@@ -1,0 +1,988 @@
+[
+  {
+    "case": "complete",
+    "expected": [
+      {
+        "key": "055f74657374045f737562085f6578616d706c65045f746370056c6f63616c00000c000100000000001c0673656e736f72085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      },
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022a",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000100000000000000000042",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72085f6578616d706c65045f746370056c6f63616c000010000100000000000a0976657273696f6e3d31",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72085f6578616d706c65045f746370056c6f63616c00002100010000000000140000000017a50673656e736f72056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "085f6578616d706c65045f746370056c6f63616c00000c000100000000001c0673656e736f72085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "missing_txt",
+    "expected": [
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022a",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000100000000000000000042",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "missing_address",
+    "expected": [
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "standalone_enumeration",
+    "expected": [
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "unknown_observed_type",
+    "expected": [
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c000100000000001a0d5f76656e646f725f7765697264045f756470056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "_vendor_weird._udp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "unknown",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "ambiguous_host",
+    "expected": [
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "198.51.100.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "foreign",
+          "name": "sensor.local.",
+          "source_link": "lab-b",
+          "type": "A"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "foreign_dependency",
+    "expected": [
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c633642a",
+        "source": "lab-b",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000200000000000000000042",
+        "source": "lab-b",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "198.51.100.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-b",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:2::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-b",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "duplicate_evidence",
+    "expected": [
+      {
+        "key": "055f74657374045f737562085f6578616d706c65045f746370056c6f63616c00000c000100000000001c0673656e736f72085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 3,
+        "unique": false
+      },
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022a",
+        "source": "lab-a",
+        "ttl": 3,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000100000000000000000042",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72085f6578616d706c65045f746370056c6f63616c000010000100000000000a0976657273696f6e3d31",
+        "source": "lab-a",
+        "ttl": 3,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72085f6578616d706c65045f746370056c6f63616c00002100010000000000140000000017a50673656e736f72056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 3,
+        "unique": true
+      },
+      {
+        "key": "085f6578616d706c65045f746370056c6f63616c00000c000100000000001c0673656e736f72085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 3,
+        "unique": false
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:03+00:00",
+          "id": "duplicate",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "rrset_shortest_ttl",
+    "expected": [
+      {
+        "key": "055f74657374045f737562085f6578616d706c65045f746370056c6f63616c00000c000100000000001c0673656e736f72085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 7,
+        "unique": false
+      },
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022a",
+        "source": "lab-a",
+        "ttl": 7,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022b",
+        "source": "lab-a",
+        "ttl": 7,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000100000000000000000042",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72085f6578616d706c65045f746370056c6f63616c000010000100000000000a0976657273696f6e3d31",
+        "source": "lab-a",
+        "ttl": 7,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72085f6578616d706c65045f746370056c6f63616c00002100010000000000140000000017a50673656e736f72056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 7,
+        "unique": true
+      },
+      {
+        "key": "085f6578616d706c65045f746370056c6f63616c00000c000100000000001c0673656e736f72085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 7,
+        "unique": false
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "192.0.2.43",
+          "expires_at": "2026-01-01T00:00:07+00:00",
+          "id": "second",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "ambiguous_srv",
+    "expected": [
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022a",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000100000000000000000042",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "0 0 6054 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv2",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "expired_host",
+    "expected": [
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:00+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:00+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 6053 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  },
+  {
+    "case": "zero_port",
+    "expected": [
+      {
+        "key": "0673656e736f72056c6f63616c0000010001000000000004c000022a",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "0673656e736f72056c6f63616c00001c000100000000001020010db8000100000000000000000042",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": true
+      },
+      {
+        "key": "095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001000000000015085f6578616d706c65045f746370056c6f63616c00",
+        "source": "lab-a",
+        "ttl": 20,
+        "unique": false
+      }
+    ],
+    "snapshot": {
+      "epoch": "synthetic-reference",
+      "issued_at": "2026-01-01T00:00:00+00:00",
+      "records": [
+        {
+          "data": "192.0.2.42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host4",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "A"
+        },
+        {
+          "data": "2001:db8:1::42",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "host6",
+          "name": "sensor.local.",
+          "source_link": "lab-a",
+          "type": "AAAA"
+        },
+        {
+          "data": "0 0 0 sensor.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "srv",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "SRV"
+        },
+        {
+          "data": "\"version=1\"",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "txt",
+          "name": "Sensor._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "TXT"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "ptr",
+          "name": "_example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "Sensor._example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "sub",
+          "name": "_test._sub._example._tcp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        },
+        {
+          "data": "_example._tcp.local.",
+          "expires_at": "2026-01-01T00:00:20+00:00",
+          "id": "enum",
+          "name": "_services._dns-sd._udp.local.",
+          "source_link": "lab-a",
+          "type": "PTR"
+        }
+      ],
+      "revision": 1,
+      "schema": 1,
+      "valid_until": "2026-01-01T00:00:30+00:00"
+    }
+  }
+]

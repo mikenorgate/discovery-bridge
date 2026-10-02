@@ -64,6 +64,9 @@ func startTime(process *os.File) (string, error) {
 	if len(fields) < 20 {
 		return "", errors.New("incomplete process identity")
 	}
+	if fields[0] == "Z" || fields[0] == "X" || fields[0] == "x" {
+		return "", errors.New("sandbox process exited")
+	}
 	if _, err := strconv.ParseUint(fields[19], 10, 64); err != nil {
 		return "", err
 	}
@@ -223,7 +226,12 @@ func (n *Namespace) Socket(iface string, family int) (*os.File, error) {
 			if err := unix.SetsockoptInt(fd, unix.IPPROTO_IP, unix.IP_MULTICAST_TTL, 255); err != nil {
 				return err
 			}
-			if err := unix.Bind(fd, &unix.SockaddrInet4{Port: 5353}); err != nil {
+			for _, option := range []struct{ name, value int }{{unix.IP_MULTICAST_ALL, 0}, {unix.IP_MULTICAST_LOOP, 1}, {unix.IP_TTL, 255}} {
+				if err := unix.SetsockoptInt(fd, unix.IPPROTO_IP, option.name, option.value); err != nil {
+					return err
+				}
+			}
+			if err := unix.Bind(fd, &unix.SockaddrInet4{Port: 5353, Addr: [4]byte{224, 0, 0, 251}}); err != nil {
 				return err
 			}
 			return unix.SetsockoptIPMreqn(fd, unix.IPPROTO_IP, unix.IP_ADD_MEMBERSHIP, &unix.IPMreqn{Multiaddr: [4]byte{224, 0, 0, 251}, Ifindex: int32(index)})
@@ -236,7 +244,12 @@ func (n *Namespace) Socket(iface string, family int) (*os.File, error) {
 		if err := unix.SetsockoptInt(fd, unix.IPPROTO_IPV6, unix.IPV6_MULTICAST_HOPS, 255); err != nil {
 			return err
 		}
-		if err := unix.Bind(fd, &unix.SockaddrInet6{Port: 5353}); err != nil {
+		for _, option := range []struct{ name, value int }{{unix.IPV6_MULTICAST_IF, int(index)}, {unix.IPV6_MULTICAST_LOOP, 1}, {unix.IPV6_UNICAST_HOPS, 255}} {
+			if err := unix.SetsockoptInt(fd, unix.IPPROTO_IPV6, option.name, option.value); err != nil {
+				return err
+			}
+		}
+		if err := unix.Bind(fd, &unix.SockaddrInet6{Port: 5353, Addr: [16]byte{0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xfb}, ZoneId: index}); err != nil {
 			return err
 		}
 		return unix.SetsockoptIPv6Mreq(fd, unix.IPPROTO_IPV6, unix.IPV6_JOIN_GROUP, &unix.IPv6Mreq{Multiaddr: [16]byte{0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xfb}, Interface: index})

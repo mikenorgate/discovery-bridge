@@ -49,7 +49,7 @@ def native(ttl=20):
               ('_private._sub._presence_olpc._tcp.local.', rt.PTR, r'Caf\195\169\.Lab._presence_olpc._tcp.local.'),
               (r'Caf\195\169\.Lab._presence_olpc._tcp.local.', rt.SRV, '0 0 6053 sensor.local.'),
               (r'Caf\195\169\.Lab._presence_olpc._tcp.local.', rt.TXT, r'"opaque=\255\000"'),
-              ('sensor.local.', rt.A, '10.22.0.2'), ('sensor.local.', rt.A, '10.22.0.3'),
+              ('sensor.local.', rt.A, '198.18.22.2'), ('sensor.local.', rt.A, '198.18.22.3'),
               ('sensor.local.', rt.AAAA, 'fd00:22::2')]
     return tuple(Record(str(i), n, int(k), d, 'lan-vlan22', now + timedelta(seconds=ttl)) for i, (n, k, d) in enumerate(values))
 
@@ -72,7 +72,7 @@ async def checks(processes, endpoints, config, start):
     addresses = {i: tuple(config['router'][link.source]['addresses']) for i, link in links.items()}
     policy = SourcePolicy(config['prefixes'], ())
     index22 = socket.if_nametoindex('lan-vlan22')
-    receivers = [Receiver('lan-vlan22', index22, 'lab', family, '10.22.0.1') for family in (4, 6)]
+    receivers = [Receiver('lan-vlan22', index22, 'lab', family, '198.18.22.1') for family in (4, 6)]
     try:
         # The same local-services jumps as the factory; explicit default deny.
         nft('''table inet example_router_factory {
@@ -92,7 +92,7 @@ async def checks(processes, endpoints, config, start):
           }
           chain forward { type filter hook forward priority filter; policy drop; counter drop; }
         }''')
-        send(endpoints[(22, 4)], [('blocked.local.', 'A', '10.22.0.2')])
+        send(endpoints[(22, 4)], [('blocked.local.', 'A', '198.18.22.2')])
         await asyncio.sleep(0.1)
         assert not select.select([receivers[0].socket], [], [], 0)[0]
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -127,9 +127,9 @@ async def checks(processes, endpoints, config, start):
         for receiver in receivers: receiver.close()
 
     # Denial remains independent: packets addressed to a router application fail.
-    listener = socket.socket(); listener.setblocking(False); listener.bind(('10.22.0.1', 6053)); listener.listen()
+    listener = socket.socket(); listener.setblocking(False); listener.bind(('198.18.22.1', 6053)); listener.listen()
     with namespace('lan-vlan22'):
-        client = socket.socket(); client.setblocking(False); client.connect_ex(('10.22.0.1', 6053))
+        client = socket.socket(); client.setblocking(False); client.connect_ex(('198.18.22.1', 6053))
     await asyncio.sleep(0.15)
     assert not select.select([listener], [], [], 0)[0]
     client.close(); listener.close()
@@ -175,7 +175,7 @@ async def checks(processes, endpoints, config, start):
                 # dnspython preserves the cache-flush bit as an unknown class;
                 # address records therefore appear as opaque wire data here.
                 values = [rr[0].to_wire() for rr in rrsets if rr.name.to_text() == host and rr.rdtype == rt.A and rr.ttl]
-                assert set(values) == {socket.inet_aton('10.22.0.2'), socket.inet_aton('10.22.0.3')}, (vlan, family, values, [(rr.to_text()) for rr in rrsets], [(await publisher._call(g[0], 'org.freedesktop.Avahi.EntryGroup', 'GetState'))[0] for g in publisher.groups.values()])
+                assert set(values) == {socket.inet_aton('198.18.22.2'), socket.inet_aton('198.18.22.3')}, (vlan, family, values, [(rr.to_text()) for rr in rrsets], [(await publisher._call(g[0], 'org.freedesktop.Avahi.EntryGroup', 'GetState'))[0] for g in publisher.groups.values()])
         report('six_link_ipv4_ipv6_publication_complete_unique_rrsets', links=6, transports=12)
         # Browser ignores own publications; wire importer also excludes persistent aliases.
         browser = await AvahiBrowser(links).connect()
@@ -194,7 +194,7 @@ async def checks(processes, endpoints, config, start):
             cache = Observations()
             cache.hint(event)
             assert not cache.records(now=time.monotonic(), wall=datetime.now(timezone.utc))
-            receiver = Receiver('lan-vlan22', index22, 'lab', 4, '10.22.0.1')
+            receiver = Receiver('lan-vlan22', index22, 'lab', 4, '198.18.22.1')
             try:
                 send(endpoints[(22, 4)], [(enumeration, 'PTR', '_presence_olpc._tcp.local.')], ttl=120)
                 async with asyncio.timeout(3):
@@ -218,16 +218,16 @@ async def checks(processes, endpoints, config, start):
             report('dynamic_empty_browser_retirement')
         finally:
             await browser.close()
-        changed = tuple(r for r in native() if r.data != '10.22.0.3')
+        changed = tuple(r for r in native() if r.data != '198.18.22.3')
         new_view = store.compile(changed, now=datetime.now(timezone.utc))
         await publisher.reconcile(tuple(Intent(i, f, time.monotonic() + 20, new_view) for i in links for f in (4, 6)))
         await asyncio.sleep(1.3)
         rrsets = await query(endpoints[(55, 6)], host, 'A')
-        assert {rr[0].to_wire() for rr in rrsets if rr.name.to_text() == host and rr.rdtype == rt.A and rr.ttl} == {socket.inet_aton('10.22.0.2')}
+        assert {rr[0].to_wire() for rr in rrsets if rr.name.to_text() == host and rr.rdtype == rt.A and rr.ttl} == {socket.inet_aton('198.18.22.2')}
         report('full_rrset_replacement_removes_old_member')
         # A remote contradictory assertion triggers Avahi's defense, then collision.
         for _ in range(5):
-            send(endpoints[(22, 4)], [(host, 'A', '10.22.0.99')])
+            send(endpoints[(22, 4)], [(host, 'A', '198.18.22.99')])
             await asyncio.sleep(0.15)
         assert publisher.conflicts, 'remote conflict did not reach ownership boundary'
         original = dns.name.from_text(host)
@@ -241,18 +241,18 @@ async def checks(processes, endpoints, config, start):
     browser = await AvahiBrowser(links).connect()
     try:
         for family in (4, 6):
-            receiver = Receiver('lan-vlan22', index22, 'lab', family, '10.22.0.1')
+            receiver = Receiver('lan-vlan22', index22, 'lab', family, '198.18.22.1')
             try:
                 name = f'unicast{family}.local.'
                 await browser.watch(RecordQuery(index22, family, name, rt.A))
                 sock = endpoints[(22, family)][0]
                 if family == 4:
                     sock.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, 255)
-                    target = ('10.22.0.1', 5353)
+                    target = ('198.18.22.1', 5353)
                 else:
                     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_UNICAST_HOPS, 255)
                     target = ('fd00:22::1', 5353)
-                send((sock, target), [(name, 'A', '10.22.0.2')])
+                send((sock, target), [(name, 'A', '198.18.22.2')])
                 event = await next_matching(browser, lambda e: e.name == name and e.added)
                 observed = None
                 async with asyncio.timeout(3):
@@ -281,7 +281,7 @@ async def checks(processes, endpoints, config, start):
     # A new record browser must not strand a pod behind known-answer suppression.
     warm = await AvahiBrowser(links).connect()
     await warm.watch(RecordQuery(index22, 4, 'cold-start.local.', rt.A))
-    send(endpoints[(22, 4)], [('cold-start.local.', 'A', '10.22.0.2')], ttl=120)
+    send(endpoints[(22, 4)], [('cold-start.local.', 'A', '198.18.22.2')], ttl=120)
     await next_matching(warm, lambda e: e.name == 'cold-start.local.' and e.added)
     await warm.close()
     Path('/tmp/config.json').write_text(json.dumps(config))
@@ -320,7 +320,7 @@ async def checks(processes, endpoints, config, start):
             if any(q.name.to_text() == 'cold-start.local.' for q in message.question):
                 if not any(r.name.to_text() == 'cold-start.local.' and r.ttl >= 60
                            for r in message.answer):
-                    send(endpoints[(22, 4)], [('cold-start.local.', 'A', '10.22.0.2')], ttl=120)
+                    send(endpoints[(22, 4)], [('cold-start.local.', 'A', '198.18.22.2')], ttl=120)
         await asyncio.sleep(.75)
         await client.refresh(node)
         recovered = any(r.name == 'cold-start.local.' for r, _ in node.catalog.records(
@@ -329,7 +329,7 @@ async def checks(processes, endpoints, config, start):
             break
     assert recovered, 'warm Avahi cache prevented fresh wire evidence after collector startup'
     report('warm_avahi_cache_recovers_fresh_wire_evidence_on_pod_demand')
-    send(endpoints[(22, 4)], [('cold-start.local.', 'A', '10.22.0.2')], ttl=0)
+    send(endpoints[(22, 4)], [('cold-start.local.', 'A', '198.18.22.2')], ttl=0)
     # A generic browser needs the type before it can ask for any instances.
     enumeration = '_services._dns-sd._udp.local.'
     for _ in range(4):
@@ -354,7 +354,7 @@ async def checks(processes, endpoints, config, start):
     rrsets = await query(endpoints[(55, 6)], '_presence_olpc._tcp.local.', 'PTR', duration=1)
     assert any(rr.ttl > 0 and rr.rdtype == rt.PTR for rr in rrsets), 'end-to-end catalog did not publish service'
     report('wire_avahi_identity_lease_pipeline_publishes_cross_vlan_service')
-    for family, kind, expected in ((4, 'A', socket.inet_aton('10.22.0.2')),
+    for family, kind, expected in ((4, 'A', socket.inet_aton('198.18.22.2')),
                                    (6, 'AAAA', socket.inet_pton(socket.AF_INET6, 'fd00:22::2'))):
         # Keep the short-lived source alive while checking both families;
         # LAN publication reserves five seconds for reconcile/withdrawal.
@@ -385,7 +385,7 @@ async def checks(processes, endpoints, config, start):
     assert not any(rr.name.to_text() == 'private-pod.local.' for m in observed
                    for rr in m.question + m.answer + m.authority + m.additional)
     for _ in range(3):
-        send(endpoints[(22, 4)], [('on-demand.local.', 'A', '10.22.0.2')], ttl=8)
+        send(endpoints[(22, 4)], [('on-demand.local.', 'A', '198.18.22.2')], ttl=8)
         await asyncio.sleep(.3)
     await client.refresh(node)
     store = Identities('/tmp/identities.db')
@@ -431,7 +431,7 @@ async def checks(processes, endpoints, config, start):
     owner.terminate(); owner.wait(timeout=5)
     monitor = LinkMonitor()
     try:
-        ip('address', 'add', '10.22.0.9/24', 'dev', 'lan-vlan22')
+        ip('address', 'add', '198.18.22.9/24', 'dev', 'lan-vlan22')
         await asyncio.sleep(0.05)
         assert monitor.changed()
         report('live_address_change_invalidates_interface_generation')

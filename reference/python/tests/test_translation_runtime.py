@@ -110,7 +110,7 @@ class TranslationTests(unittest.TestCase):
 
     def test_nat64_native_preference_and_no_double_translation(self):
         self.load(4); self.accept(self.envelope())
-        self.assertEqual([r.data for r, _ in self.records() if r.type == rt.AAAA], ['2001:db8:1000:fd65::a16:2a'])
+        self.assertEqual([r.data for r, _ in self.records() if r.type == rt.AAAA], ['2001:db8:1000:fd65::c612:162a'])
         records = decode_snapshot(encode(fixture()), now=NOW, policy=policy()).records
         self.assertEqual(self.translation.render(records, now=NOW, monotonic=100), records)
         rendered = tuple(r for r, _ in self.records())

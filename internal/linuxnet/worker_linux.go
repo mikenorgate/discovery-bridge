@@ -1,0 +1,120 @@
+package linuxnet
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+)
+
+// Worker owns the broker end of a private channel and the child lifetime.
+type Worker struct {
+	Channel *os.File
+	PID     int
+	Done    <-chan error
+	process *os.Process
+}
+
+// StartWorker starts one unprivileged responder on a dedicated supervisor thread.
+// The thread remains locked until Wait returns, preserving Linux PDEATHSIG.
+func StartWorker(ctx context.Context, binary string, args []string, uid, gid uint32, stderr io.Writer) (*Worker, error) {
+	if uid == 0 || gid == 0 || !strings.HasPrefix(binary, "/") {
+		return nil, errors.New("absolute executable and non-root worker credentials required")
+	}
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	owner := os.NewFile(uintptr(fds[0]), "broker control")
+	child := os.NewFile(uintptr(fds[1]), "worker control")
+	type started struct {
+		worker *Worker
+		err    error
+	}
+	ready := make(chan started, 1)
+	done := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+		// NO_NEW_PRIVS is inherited before exec and thus by every Go worker thread.
+		// Exit this goroutine while locked to retire the modified supervisor thread.
+		if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+			ready <- started{err: err}
+			return
+		}
+		arguments := append([]string{"worker", "--control-fd", "3", "--parent", strconv.Itoa(os.Getpid())}, args...)
+		command := exec.CommandContext(ctx, binary, arguments...)
+		command.Env = []string{"PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+		command.ExtraFiles = []*os.File{child}
+		command.Stderr = stderr
+		command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}, Pdeathsig: syscall.SIGKILL}
+		if err := command.Start(); err != nil {
+			ready <- started{err: err}
+			return
+		}
+		ready <- started{worker: &Worker{Channel: owner, PID: command.Process.Pid, Done: done, process: command.Process}}
+		done <- command.Wait()
+		close(done)
+	}()
+	result := <-ready
+	closeErr := child.Close()
+	if result.err != nil {
+		return nil, errors.Join(result.err, closeErr, owner.Close())
+	}
+	if closeErr != nil {
+		return nil, errors.Join(closeErr, result.worker.Close())
+	}
+	return result.worker, nil
+}
+
+// Close revokes the channel and kills the worker, including a stopped child.
+func (w *Worker) Close() error {
+	channelErr := w.Channel.Close()
+	if errors.Is(channelErr, os.ErrClosed) {
+		channelErr = nil
+	}
+	err := w.process.Kill()
+	if errors.Is(err, os.ErrProcessDone) {
+		err = nil
+	}
+	return errors.Join(channelErr, err)
+}
+
+// CheckWorkerConfinement verifies the broker established process confinement.
+func CheckWorkerConfinement(parent int) error {
+	if parent <= 1 || os.Getppid() != parent || os.Geteuid() == 0 || os.Getegid() == 0 {
+		return errors.New("invalid worker parent or credentials")
+	}
+	groups, err := os.Getgroups()
+	if err != nil || len(groups) != 0 {
+		return errors.Join(err, errors.New("worker retains supplementary groups"))
+	}
+	data, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return err
+	}
+	values := make(map[string]string)
+	for line := range strings.SplitSeq(string(data), "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if ok {
+			values[key] = strings.TrimSpace(value)
+		}
+	}
+	for _, key := range []string{"CapEff", "CapPrm", "CapAmb"} {
+		value, err := strconv.ParseUint(values[key], 16, 64)
+		if err != nil || value != 0 {
+			return fmt.Errorf("worker confinement rejected: %s", key)
+		}
+	}
+	if values["NoNewPrivs"] != "1" {
+		return errors.New("worker requires inherited NO_NEW_PRIVS")
+	}
+	return nil
+}

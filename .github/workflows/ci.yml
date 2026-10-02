@@ -57,6 +57,7 @@ jobs:
         run: |
           python3 -m pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt
           make reference
+          python3 tests/reference_views.py --check
 
   lint:
     name: Lint and vulnerabilities

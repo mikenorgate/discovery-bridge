@@ -4,6 +4,7 @@ package linuxnet_test
 
 import (
 	"context"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,12 +50,19 @@ func TestNamespaceSocketsAndRestoration(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	for _, args := range [][]string{{"link", "set", "lo", "up"}, {"link", "add", "dummy0", "type", "dummy"}, {"link", "set", "dummy0", "up"}} {
+	for _, args := range [][]string{{"link", "set", "lo", "up"}, {"link", "add", "dummy0", "type", "dummy"}, {"link", "set", "dummy0", "up", "multicast", "on"}, {"address", "add", "192.0.2.42/24", "dev", "dummy0"}, {"address", "add", "2001:db8:1::42/64", "dev", "dummy0", "nodad"}} {
 		command := exec.CommandContext(ctx, "nsenter", "--target", strconv.Itoa(child.Process.Pid), "--net", "ip")
 		command.Args = append(command.Args, args...)
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("namespace setup: %v: %s", err, output)
 		}
+	}
+	details, err := ns.Inspect("dummy0", []netip.Addr{netip.MustParseAddr("192.0.2.42"), netip.MustParseAddr("2001:db8:1::42")})
+	if err != nil || details.Index < 1 {
+		t.Fatal("namespace interface inspection failed", details, err)
+	}
+	if _, err := ns.Inspect("dummy0", []netip.Addr{netip.MustParseAddr("2001:db8:1::43")}); err == nil {
+		t.Fatal("accepted API/interface address mismatch")
 	}
 	before, err := os.Stat("/proc/self/ns/net")
 	if err != nil {

@@ -42,7 +42,7 @@ async def client(role):
 
 def run():
     assert os.environ.get('MDNS_ISOLATED_LAB') == '1' and socket.if_nameindex() == [(1, 'lo')]
-    for command in (['ip', 'link', 'add', 'eth0', 'type', 'dummy'], ['ip', 'address', 'add', '10.22.0.1/24', 'dev', 'eth0'],
+    for command in (['ip', 'link', 'add', 'eth0', 'type', 'dummy'], ['ip', 'address', 'add', '198.18.22.1/24', 'dev', 'eth0'],
                     ['ip', 'link', 'set', 'eth0', 'up']):
         subprocess.run(command, check=True)
     policy = Path('/app/router_candidate/zz-discovery-bridge.conf').read_text()

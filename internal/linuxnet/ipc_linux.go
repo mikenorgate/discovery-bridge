@@ -55,15 +55,20 @@ func Receive(fd int) (data json.RawMessage, descriptors []int, err error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	unexpected := false
 	for _, item := range controls {
 		if item.Header.Level != unix.SOL_SOCKET || item.Header.Type != unix.SCM_RIGHTS {
-			return nil, descriptors, errors.New("unexpected broker ancillary data")
+			unexpected = true
+			continue
 		}
 		fds, parseErr := unix.ParseUnixRights(&item)
 		if parseErr != nil {
 			return nil, descriptors, parseErr
 		}
 		descriptors = append(descriptors, fds...)
+	}
+	if unexpected {
+		return nil, descriptors, errors.New("unexpected broker ancillary data")
 	}
 	if n == 0 {
 		return nil, descriptors, io.EOF

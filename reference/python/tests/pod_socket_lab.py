@@ -120,7 +120,7 @@ async def check_client(family, agent_first, feed, gateway_client, demand_calls):
         assert session.events['sent'] == 0, 'idle session sent a packet'
         resolver = AddressResolver('sensor.local.')
         assert await resolver.async_request(zc.zeroconf, 3000), dict(session.events)
-        assert set(resolver.parsed_addresses(IPVersion.All)) == {'10.22.0.42', '2001:db8:1000:22::42'}
+        assert set(resolver.parsed_addresses(IPVersion.All)) == {'198.18.22.42', '2001:db8:1000:22::42'}
         found = asyncio.Event()
         def discovered(zeroconf, service_type, name, state_change):
             if name == 'Sensor._esphomelib._tcp.local.' and state_change == ServiceStateChange.Added:
@@ -131,18 +131,18 @@ async def check_client(family, agent_first, feed, gateway_client, demand_calls):
         assert await info.async_request(zc.zeroconf, 3000)
         assert info.port == 6053 and info.server == 'sensor.local.'
         assert info.properties[b'opaque'] == b'\xff\x00'
-        assert set(info.parsed_addresses(IPVersion.All)) == {'10.22.0.42', '2001:db8:1000:22::42'}
+        assert set(info.parsed_addresses(IPVersion.All)) == {'198.18.22.42', '2001:db8:1000:22::42'}
         report('zeroconf_hostname_and_service_browse_over_tls_feed', family=family, agent_first=agent_first)
 
         # A fresh unicast answer must reach zeroconf, regardless of bind order.
         message = dns.message.Message(); message.flags = dns.flags.QR | dns.flags.AA
-        message.answer.append(dns.rrset.from_text('unicast.local.', 5, 'IN', 'A', '10.22.0.99'))
+        message.answer.append(dns.rrset.from_text('unicast.local.', 5, 'IN', 'A', '198.18.22.99'))
         endpoint.send(Reply('peer', family, message.to_wire(), ()), (source, 5353))
         unicast = AddressResolver('unicast.local.')
         async with asyncio.timeout(2):
             while not unicast.load_from_cache(zc.zeroconf):
                 await asyncio.sleep(.01)
-        assert unicast.parsed_addresses() == ['10.22.0.99']
+        assert unicast.parsed_addresses() == ['198.18.22.99']
         report('shared_5353_unicast_reaches_zeroconf', family=family, agent_first=agent_first)
 
         request = query(); request.id = 4242

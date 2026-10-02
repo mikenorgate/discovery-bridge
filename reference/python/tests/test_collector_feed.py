@@ -42,7 +42,7 @@ class CollectorFeedTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.feed.close)
         self.bridge = CollectorFeed(self.feed, self.identities)
         self.bridge.browser = Browser()
-        self.bridge.addresses = {22: ('10.22.0.1', 'fd00:22::1'), 55: ('fd00:55::1',)}
+        self.bridge.addresses = {22: ('198.18.22.1', 'fd00:22::1'), 55: ('fd00:55::1',)}
         sender = patch('discovery.collector.send_questions')
         self.send_questions = sender.start()
         self.addCleanup(sender.stop)
@@ -258,7 +258,7 @@ class FreshQuestionTests(unittest.TestCase):
         import dns.message
         for family in (4, 6):
             with self.subTest(family=family), patch('discovery.transport._send_multicast') as send:
-                send_questions(22, family, '_esphomelib._tcp.local.', (rt.PTR,), ('10.22.0.1', 'fd00:22::1'))
+                send_questions(22, family, '_esphomelib._tcp.local.', (rt.PTR,), ('198.18.22.1', 'fd00:22::1'))
                 message = dns.message.from_wire(send.call_args.args[2][0])
                 self.assertEqual((message.id, message.flags), (0, 0))
                 self.assertEqual(len(message.question), 1)
@@ -272,5 +272,5 @@ class FreshQuestionTests(unittest.TestCase):
             for name, kinds in [('example.org.', (rt.A,)), ('sensor.local.', (rt.AXFR,)),
                                 ('sensor.local.', ())]:
                 with self.subTest(name=name, kinds=kinds), self.assertRaises(ValueError):
-                    send_questions(22, 4, name, kinds, ('10.22.0.1',))
+                    send_questions(22, 4, name, kinds, ('198.18.22.1',))
             send.assert_not_called()

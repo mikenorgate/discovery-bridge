@@ -62,7 +62,7 @@ async def check_discovery(family):
         info = AsyncServiceInfo('_esphomelib._tcp.local.', 'Sensor._esphomelib._tcp.local.')
         assert await info.async_request(zc.zeroconf, 5000)
         assert info.port == 6053 and info.properties[b'opaque'] == b'\xff\x00'
-        assert {'10.22.0.42', '2001:db8:1000:22::42'} <= set(info.parsed_addresses())
+        assert {'198.18.22.42', '2001:db8:1000:22::42'} <= set(info.parsed_addresses())
         report('broker_to_worker_http_zeroconf_hostname_service', family=family)
     finally:
         await zc.async_close()
@@ -118,7 +118,7 @@ async def run_lab(sandbox):
         'rules': [{'namespace': 'default', 'service_account': 'home-assistant',
                    'match_labels': {'app.kubernetes.io/name': 'home-assistant'}}],
         'gateway': {'host': '127.0.0.1', 'port': port},
-        'sources': {'vlan22': ['10.22.0.0/24', '2001:db8:1000:22::/64']}, 'forbidden': ['10.96.0.0/12']}
+        'sources': {'vlan22': ['198.18.22.0/24', '2001:db8:1000:22::/64']}, 'forbidden': ['198.19.0.0/16']}
     Path('/tmp/node-config.json').write_text(json.dumps(config))
     process = None
     def start():

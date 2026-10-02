@@ -55,7 +55,7 @@ def setup_network():
             ip('address', 'add', '192.0.2.1/24', 'dev', 'pod-link')
         ip('link', 'add', 'lan-vlan22', 'type', 'veth', 'peer', 'name', 'eth0', 'netns', 'device')
         ip('link', 'set', 'lan-vlan22', 'up')
-        ip('address', 'add', '10.22.0.1/24', 'dev', 'lan-vlan22')
+        ip('address', 'add', '198.18.22.1/24', 'dev', 'lan-vlan22')
         ip('-6', 'address', 'add', 'fd00:22::1/64', 'dev', 'lan-vlan22', 'nodad')
     with namespace('device'):
         ip('link', 'set', 'eth0', 'up')
@@ -63,7 +63,7 @@ def setup_network():
         command = ctypes.create_string_buffer(struct.pack('II', 0x17, 0))
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as control:
             fcntl.ioctl(control.fileno(), 0x8946, struct.pack('16sP', b'eth0', ctypes.addressof(command)))
-        ip('address', 'add', '10.22.0.2/24', 'dev', 'eth0')
+        ip('address', 'add', '198.18.22.2/24', 'dev', 'eth0')
         ip('-6', 'address', 'add', 'fd00:22::2/64', 'dev', 'eth0', 'nodad')
     time.sleep(1.2)  # Finish link-local DAD before the collector pins its epoch.
 
@@ -78,18 +78,18 @@ async def run():
             process = subprocess.Popen(command, stdout=log, stderr=log)
         processes.append(process)
         return process
-    ep = endpoint('device', 4, '10.22.0.2')
+    ep = endpoint('device', 4, '198.18.22.2')
     capture = endpoint('discovery-pod', 6, 'fd00:5353::2')[0]
     query_shapes = set()
     records = [('_services._dns-sd._udp.local.', 'PTR', SERVICE),
                (SERVICE, 'PTR', INSTANCE), (INSTANCE, 'SRV', '0 0 6053 ' + HOST),
                (INSTANCE, 'TXT', '"version=2026.9.0" "mac=020000000042" "platform=ESP32" "board=esp32dev" "friendly_name=mDNS Canary"'),
-               (HOST, 'A', '10.22.0.2'), (HOST, 'AAAA', 'fd00:22::2')]
+               (HOST, 'A', '198.18.22.2'), (HOST, 'AAAA', 'fd00:22::2')]
     try:
         gateway = {'enabled': True, 'listen_address': '127.0.0.1', 'port': 18443,
                    'clients': ['127.0.0.1/32']}
         config = {'enabled': True, 'interfaces': ['lan-vlan22'],
-                  'prefixes': {'lan-vlan22': ['10.22.0.0/24', 'fd00:22::/64']},
+                  'prefixes': {'lan-vlan22': ['198.18.22.0/24', 'fd00:22::/64']},
                   'bootstrap': [[SERVICE, 12]], 'gateway': gateway}
         Path('/tmp/router-config.json').write_text(json.dumps(config))
         Path('/tmp/avahi.conf').write_text(avahi_config())

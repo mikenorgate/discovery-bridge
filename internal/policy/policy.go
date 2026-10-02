@@ -61,10 +61,12 @@ func (p *SourcePolicy) CheckAddress(source string, address netip.Addr) error {
 		}
 	}
 	scopes := p.sources[source]
+	matched := false
 	for _, prefix := range scopes {
 		if !prefix.Contains(address) {
 			continue
 		}
+		matched = true
 		if address.Is4() && prefix.Bits() < 31 {
 			if address == prefix.Addr() {
 				return errors.New("IPv4 network address is unusable")
@@ -76,6 +78,8 @@ func (p *SourcePolicy) CheckAddress(source string, address netip.Addr) error {
 				return errors.New("IPv4 broadcast address is unusable")
 			}
 		}
+	}
+	if matched {
 		return nil
 	}
 	return errors.New("address is outside its observed source scope")

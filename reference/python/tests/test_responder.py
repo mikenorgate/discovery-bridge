@@ -238,7 +238,7 @@ class ResponderTests(unittest.TestCase):
         other = deepcopy(self.data['records'][-1])
         other.update(id='other-host', source_link='vlan55', data='2001:db8:1000:55::42')
         self.data['records'].append(other)
-        scopes = SourcePolicy({'vlan22': ('10.22.0.0/24', '2001:db8:1000:22::/64'),
+        scopes = SourcePolicy({'vlan22': ('198.18.22.0/24', '2001:db8:1000:22::/64'),
                                'vlan55': ('2001:db8:1000:55::/64',)}, ())
         self.catalog = Catalog(scopes)
         self.responder = Responder(self.catalog)

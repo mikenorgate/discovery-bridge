@@ -21,7 +21,7 @@ def fixture():
         ('browse', '_esphomelib._tcp.local.', 'PTR', 'Sensor._esphomelib._tcp.local.'),
         ('srv', 'Sensor._esphomelib._tcp.local.', 'SRV', '0 0 6053 sensor.local.'),
         ('txt', 'Sensor._esphomelib._tcp.local.', 'TXT', r'"name=Sensor" "opaque=\255\000"'),
-        ('v4', 'sensor.local.', 'A', '10.22.0.42'),
+        ('v4', 'sensor.local.', 'A', '198.18.22.42'),
         ('v6', 'sensor.local.', 'AAAA', '2001:db8:1000:22::42'),
     ]
     return {'schema': 1, 'epoch': 'gateway-boot-1', 'revision': 1,
@@ -31,8 +31,8 @@ def fixture():
 
 
 def policy():
-    return SourcePolicy({'vlan22': ('10.22.0.0/24', '2001:db8:1000:22::/64')},
-                        ('10.96.0.0/12',))
+    return SourcePolicy({'vlan22': ('198.18.22.0/24', '2001:db8:1000:22::/64')},
+                        ('198.19.0.0/16',))
 
 
 def encode(data):
@@ -83,23 +83,23 @@ class DecoderTests(unittest.TestCase):
                 self.decode(data)
 
     def test_address_scope_and_synthetic_records_rejected(self):
-        broad = SourcePolicy({'vlan22': ('0.0.0.0/0', '::/0')}, ('10.96.0.0/12',))
-        for address in ['::', '::1', 'fe80::1', 'ff02::fb', '::ffff:10.22.0.42',
+        broad = SourcePolicy({'vlan22': ('0.0.0.0/0', '::/0')}, ('198.19.0.0/16',))
+        for address in ['::', '::1', 'fe80::1', 'ff02::fb', '::ffff:198.18.22.42',
                         '2001:db8:1000:f000::1', '2001:db8:1000:fd46::1',
-                        '2001:db8:1000:fd65::1', '64:ff9b::a16:2a', '198.19.200.2',
-                        '10.96.0.1', '127.0.0.1', '169.254.1.1', '224.0.0.251']:
+                        '2001:db8:1000:fd65::1', '64:ff9b::c612:162a', '198.19.200.2',
+                        '198.19.0.1', '127.0.0.1', '169.254.1.1', '224.0.0.251']:
             with self.subTest(address=address), self.assertRaises(ValueError):
                 broad.check_address('vlan22', address)
-        for address in ['10.22.1.42', '10.22.0.0', '10.22.0.255', '2001:db8:1000:55::42']:
+        for address in ['198.18.23.42', '198.18.22.0', '198.18.22.255', '2001:db8:1000:55::42']:
             with self.subTest(address=address), self.assertRaises(ValueError):
                 policy().check_address('vlan22', address)
 
     def test_policy_cannot_be_mutated(self):
-        sources = {'vlan22': ['10.22.0.0/24']}
+        sources = {'vlan22': ['198.18.22.0/24']}
         scopes = SourcePolicy(sources, ())
-        sources['vlan22'].append('10.55.0.0/24')
+        sources['vlan22'].append('198.18.55.0/24')
         with self.assertRaises(ValueError):
-            scopes.check_address('vlan22', '10.55.0.42')
+            scopes.check_address('vlan22', '198.18.55.42')
         with self.assertRaises(TypeError):
             scopes.sources['vlan55'] = ()
         with self.assertRaises(FrozenInstanceError):

@@ -31,17 +31,17 @@ LINKS = {22: Link('vlan22', 'g1', frozenset({4, 6}))}
 REGISTRY = Path(__file__).resolve().parents[1] / 'registry'
 
 
-def packet(*, ttl=10, flush=True, address='10.22.0.42'):
+def packet(*, ttl=10, flush=True, address='198.18.22.42'):
     message = dns.message.Message(id=0)
     message.flags = dns.flags.QR | dns.flags.AA
     rrset = dns.rrset.from_text('sensor.local.', ttl, 1, 'A', address)
     rrset.rdclass = 0x8001 if flush else 1
     message.answer.append(rrset)
-    return Packet(22, 'g1', 4, '10.22.0.42', '224.0.0.251', 255, 5353, 5353, message.to_wire())
+    return Packet(22, 'g1', 4, '198.18.22.42', '224.0.0.251', 255, 5353, 5353, message.to_wire())
 
 
 def parse(value):
-    return parse_response(value, links=LINKS, policy=policy(), local_addresses={22: ('10.22.0.1',)})
+    return parse_response(value, links=LINKS, policy=policy(), local_addresses={22: ('198.18.22.1',)})
 
 
 def hint(record, *, added=True, epoch='epoch'):
@@ -54,11 +54,11 @@ class ObservationTests(unittest.TestCase):
     def test_metadata_and_whole_packet_validation(self):
         self.assertTrue(parse(packet())[0].flush)
         for values in ({'hop_limit': 254}, {'interface': 55}, {'generation': 'old'}, {'source_port': 53},
-                       {'destination_port': 12345}, {'source': '10.55.0.42'}, {'destination': '10.22.0.5'},
+                       {'destination_port': 12345}, {'source': '198.18.55.42'}, {'destination': '198.18.22.5'},
                        {'wire': packet().wire[:-1]}, {'wire': packet().wire + b'junk'}):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 parse(replace(packet(), **values))
-        self.assertEqual(parse(replace(packet(), source='10.22.0.1')), ())
+        self.assertEqual(parse(replace(packet(), source='198.18.22.1')), ())
         self.assertEqual(parse(packet(address='198.19.200.42')), ())
         self.assertEqual(parse_response(packet(), links=LINKS, policy=policy(), local_addresses={}, owns_name=lambda _: True), ())
 
@@ -79,7 +79,7 @@ class ObservationTests(unittest.TestCase):
         cache = Observations()
         old = replace(parse(packet())[0], family=6)
         cache.hint(hint(old)); cache.ingest((old,), now=0)
-        new = parse(packet(address='10.22.0.43'))[0]
+        new = parse(packet(address='198.18.22.43'))[0]
         cache.hint(hint(new)); cache.ingest((new,), now=0.2)
         self.assertEqual(len(cache.records(now=0.2, wall=NOW)), 2)
         cache.ingest((new,), now=2)
@@ -91,7 +91,7 @@ class ObservationTests(unittest.TestCase):
         cache = Observations(limit=1)
         cache.ingest(parse(packet()), now=0)
         with self.assertRaises(ValueError):
-            cache.ingest(parse(packet(address='10.22.0.43')), now=0)
+            cache.ingest(parse(packet(address='198.18.22.43')), now=0)
         self.assertTrue(cache.failed)
         cache = Observations()
         cache.ingest(parse(packet()), now=2)
@@ -417,7 +417,7 @@ class TransportTests(unittest.TestCase):
         import struct
         from ipaddress import ip_address
         from discovery.transport import checksum, decode_udp
-        for family, src, dst in [(4, '10.22.0.2', '224.0.0.251'), (6, 'fd00:22::2', 'ff02::fb')]:
+        for family, src, dst in [(4, '198.18.22.2', '224.0.0.251'), (6, 'fd00:22::2', 'ff02::fb')]:
             payload = packet().wire
             size = len(payload) + 8
             pseudo = ip_address(src).packed + ip_address(dst).packed

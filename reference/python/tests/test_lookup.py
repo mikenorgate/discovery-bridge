@@ -13,7 +13,7 @@ def request(name='sensor.local.', **extra):
 class LookupDecoderTests(unittest.TestCase):
     def test_question_only_schema_and_local_names(self):
         self.assertEqual(decode_lookup(request('SENSOR.local.'))[0].name, 'sensor.local.')
-        for payload in [request(view='all'), request(records=[]), request(pod='10.22.0.2'),
+        for payload in [request(view='all'), request(records=[]), request(pod='198.18.22.2'),
                         request('outside.example.'), request('relative'), request('a' * 64 + '.local.'),
                         request().replace(b'"type":1', b'"type":true'),
                         request().replace(b'"schema":1', b'"schema":1,"schema":1'),

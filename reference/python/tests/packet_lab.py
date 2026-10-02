@@ -196,7 +196,7 @@ def check_family(family):
                         return Responder(node.catalog), node.authority
                     responder, publication = refresh()
                     kind = rt.AAAA if target_family == 4 else rt.A
-                    expected = '2001:db8:1000:fd65::a16:2a' if target_family == 4 else '198.19.200.42'
+                    expected = '2001:db8:1000:fd65::c612:162a' if target_family == 4 else '198.19.200.42'
                     response = exchange(query())[0]
                     assert any(rr.rdtype == kind and rr[0].address == expected for rr in response.additional)
                     responder = Responder(node.catalog)
