@@ -60,7 +60,8 @@ jobs:
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
             # NET_ADMIN is used by the test harness to create isolated interfaces.
             # Worker permissions remain empty; the broker needs no CAP_KILL.
-            docker run --rm --network none --read-only --tmpfs /tmp --tmpfs /run \
+            docker run --rm --network none --read-only \
+              --tmpfs /tmp:rw,nosuid,nodev,exec --tmpfs /run \
               --memory 192m --pids-limit 64 --cap-drop ALL \
               --cap-add SYS_ADMIN --cap-add SYS_PTRACE --cap-add SETUID \
               --cap-add SETGID --cap-add NET_ADMIN \
