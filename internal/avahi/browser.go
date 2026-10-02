@@ -67,6 +67,20 @@ func ConnectBrowser(ctx context.Context, path string, links map[int]observation.
 }
 
 func newBrowser(links map[int]observation.Link) (*Browser, error) {
+	links, err := copyLinks(links)
+	if err != nil {
+		return nil, err
+	}
+	var token [16]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return nil, err
+	}
+	return &Browser{epoch: hex.EncodeToString(token[:]), links: links,
+		paths: make(map[dbus.ObjectPath]Query), queries: make(map[Query]dbus.ObjectPath),
+		seen: make(map[seenKey]dns.RR), touched: make(map[Query]time.Time), permanent: make(map[Query]bool)}, nil
+}
+
+func copyLinks(links map[int]observation.Link) (map[int]observation.Link, error) {
 	if len(links) == 0 || len(links) > 64 {
 		return nil, errors.New("explicit bounded LAN interfaces required")
 	}
@@ -83,13 +97,7 @@ func newBrowser(links map[int]observation.Link) (*Browser, error) {
 		link.Families = families
 		links[index] = link
 	}
-	var token [16]byte
-	if _, err := rand.Read(token[:]); err != nil {
-		return nil, err
-	}
-	return &Browser{epoch: hex.EncodeToString(token[:]), links: links,
-		paths: make(map[dbus.ObjectPath]Query), queries: make(map[Query]dbus.ObjectPath),
-		seen: make(map[seenKey]dns.RR), touched: make(map[Query]time.Time), permanent: make(map[Query]bool)}, nil
+	return links, nil
 }
 
 // Epoch identifies hints that must be discarded together after connection loss.

@@ -9,6 +9,7 @@ The Go port is in progress. The binary provides the node broker and its
 unprivileged responder, plus registry descriptions. Tested libraries cover
 leased catalogs, DNS-SD responses, address policy, HTTP feeds, SQLite state and
 interface-scoped Avahi observations with independent wire expiry.
+The independent Avahi publisher and its local producer protocol are also under test.
 Router adapters and release packages are still being implemented. The Python
 snapshot provides a behavioral reference with synthetic fixtures.
 

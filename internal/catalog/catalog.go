@@ -56,7 +56,20 @@ type Record struct {
 
 // RR parses the record's canonical DNS representation with an explicit TTL.
 func (r Record) RR(ttl uint32) (dns.RR, error) {
-	return dns.NewRR(fmt.Sprintf("%s %d IN %s %s", r.Name, ttl, r.Type, r.Data))
+	parser := dns.NewZoneParser(strings.NewReader(fmt.Sprintf("%s %d IN %s %s", r.Name, ttl, r.Type, r.Data)), "", "")
+	rr, ok := parser.Next()
+	if !ok {
+		return nil, errors.New("invalid DNS record data")
+	}
+	if _, extra := parser.Next(); extra || parser.Err() != nil {
+		return nil, errors.New("trailing or invalid DNS record data")
+	}
+	kind, known := dns.StringToType[strings.ToUpper(r.Type)]
+	h := rr.Header()
+	if !known || h.Rrtype != kind || h.Class != dns.ClassINET || h.Ttl != ttl || NameKey(h.Name) != NameKey(r.Name) {
+		return nil, errors.New("DNS record header differs from declared fields")
+	}
+	return rr, nil
 }
 
 // Snapshot is a full replacement; omitted records are withdrawn.

@@ -44,6 +44,14 @@ LoadBalancer address and the external Service port. Ownership and lease loss
 withdraw advertisements. The LAN publisher expires producer leases independently
 of collector progress.
 
+LAN publication IPC remains newline-delimited JSON with `boot`, `sequence`,
+`issued` and complete `groups`. The Unix peer UID admits one local producer.
+Each group carries an approved interface/family, an absolute monotonic deadline
+and coherent records with persistent name ownership. Receiver cache TTL is one
+second. Disconnect, invalid replacement or an expired lease withdraws ownership.
+Run groups concurrently within the twelve-group bound; retain each group's
+ordered D-Bus calls. A stalled D-Bus writer cannot extend a publication lease.
+
 Broker IPC remains bounded JSON over Unix `SOCK_SEQPACKET`, with at most two
 socket descriptors per message. The broker owns namespace admission; the
 unprivileged worker receives sockets and leases. Worker requests cannot choose

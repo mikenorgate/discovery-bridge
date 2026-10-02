@@ -35,6 +35,7 @@ type bus struct {
 	failure error
 	failed  chan struct{}
 	signals chan *dbus.Signal
+	socket  *net.UnixConn
 	conn    *dbus.Conn
 	done    chan struct{}
 }
@@ -45,10 +46,17 @@ func newBus() *bus {
 
 func (b *bus) fail(err error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	first := b.failure == nil
 	if b.failure == nil {
 		b.failure = err
 		close(b.failed)
+	}
+	socket := b.socket
+	b.mu.Unlock()
+	if first && socket != nil {
+		// Close the transport directly. Conn.Close first waits for godbus' writer
+		// lock; a stalled local daemon must not hold that lock past a source lease.
+		_ = socket.Close()
 	}
 }
 
@@ -118,6 +126,7 @@ func connectBus(ctx context.Context, path string) (*bus, error) {
 		return nil, err
 	}
 	b := newBus()
+	b.socket = uconn
 	b.conn, err = dbus.DialUnix(uconn, dbus.WithContext(ctx), dbus.WithSignalHandler(b))
 	if err != nil {
 		return nil, err

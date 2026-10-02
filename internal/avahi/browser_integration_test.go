@@ -24,6 +24,11 @@ import (
 )
 
 func privateBus(t *testing.T) string {
+	path, _ := privateBusProcess(t)
+	return path
+}
+
+func privateBusProcess(t *testing.T) (string, *exec.Cmd) {
 	t.Helper()
 	program, err := exec.LookPath("dbus-daemon")
 	if err != nil {
@@ -69,7 +74,7 @@ func privateBus(t *testing.T) string {
 	case <-time.After(3 * time.Second):
 		t.Fatal("private D-Bus startup timed out")
 	}
-	return path
+	return path, command
 }
 
 type fakeAvahi struct {

@@ -56,7 +56,7 @@ jobs:
       - name: Restricted container integration
         run: |
           docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
-          for package in linuxnet node avahi observation; do
+          for package in linuxnet node avahi observation publication; do
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
             capabilities=()
             if [ "$package" = observation ]; then capabilities+=(--cap-add NET_RAW); fi
@@ -77,7 +77,7 @@ jobs:
           python3 -m pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt
           make reference
           python3 tests/reference_views.py --check
-          go test -race -tags reference -count=1 ./internal/gateway ./internal/state
+          go test -race -tags reference -count=1 ./internal/gateway ./internal/state ./internal/publication
 
   lint:
     name: Lint and vulnerabilities
