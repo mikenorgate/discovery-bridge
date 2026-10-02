@@ -51,13 +51,15 @@ jobs:
       - name: Isolated namespace integration
         run: |
           sudo apt-get update -qq
-          sudo apt-get install --yes iproute2 util-linux
-          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet ./internal/node
+          sudo apt-get install --yes iproute2 util-linux dbus
+          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet ./internal/node ./internal/avahi ./internal/observation
       - name: Restricted container integration
         run: |
           docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
-          for package in linuxnet node; do
+          for package in linuxnet node avahi observation; do
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
+            capabilities=()
+            if [ "$package" = observation ]; then capabilities+=(--cap-add NET_RAW); fi
             # NET_ADMIN is used by the test harness to create isolated interfaces.
             # Worker permissions remain empty; the broker needs no CAP_KILL.
             docker run --rm --network none --read-only \
@@ -65,6 +67,7 @@ jobs:
               --memory 192m --pids-limit 64 --cap-drop ALL \
               --cap-add SYS_ADMIN --cap-add SYS_PTRACE --cap-add SETUID \
               --cap-add SETGID --cap-add NET_ADMIN \
+              "${capabilities[@]}" \
               --security-opt apparmor=unconfined --security-opt no-new-privileges \
               --volume "$RUNNER_TEMP/$package.test:/lab/test:ro" \
               --entrypoint /lab/test discovery-bridge-integration -test.v

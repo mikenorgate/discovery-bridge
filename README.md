@@ -7,7 +7,8 @@ without forwarding LAN questions into them or advertising individual pods.
 
 The Go port is in progress. The binary provides the node broker and its
 unprivileged responder, plus registry descriptions. Tested libraries cover
-leased catalogs, DNS-SD responses, address policy, HTTP feeds and SQLite state.
+leased catalogs, DNS-SD responses, address policy, HTTP feeds, SQLite state and
+interface-scoped Avahi observations with independent wire expiry.
 Router adapters and release packages are still being implemented. The Python
 snapshot provides a behavioral reference with synthetic fixtures.
 
@@ -35,10 +36,12 @@ PYTHONDONTWRITEBYTECODE=1 ../../.venv/bin/python -m unittest discover -s tests -
 ```
 
 Linux namespace integration tests require root and an isolated test environment
-with `iproute2` and `util-linux`. CI runs them on disposable native AMD64 and
-ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/node`
-checks IPv4/IPv6 pod replies, namespace restoration, socket withdrawal and worker
-cleanup. CI also runs these checks in a restricted Debian 13 container.
+with `iproute2`, `util-linux` and `dbus`. CI runs them on disposable native AMD64
+and ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/node
+./internal/avahi ./internal/observation` checks pod replies, namespace restoration,
+worker cleanup, D-Bus ownership loss, and fragmented IPv4/IPv6 LAN responses.
+Raw receive copies leave Avahi's UDP port ownership intact. CI also runs these
+checks in a restricted Debian 13 container.
 
 With the reference dependencies installed, run
 `go test -tags reference ./internal/gateway` to check the Go client against the

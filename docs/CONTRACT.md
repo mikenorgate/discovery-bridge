@@ -11,6 +11,13 @@ their source lease expires or a goodbye arrives. Keep PTR/SRV/TXT/address chains
 within one source. Withhold ambiguous original hostnames and incomplete service
 instances. Unknown observed types and subtypes remain discoverable.
 
+Avahi browser events are hints with no renewable TTL. Export requires matching
+wire evidence on the same interface generation and transport family. A cached
+hint cannot renew an expired packet observation. Lose all hints when Avahi's
+D-Bus owner changes, its running state ends or a bounded event queue overflows.
+Observe kernel-reassembled raw UDP copies without competing for Avahi's unicast
+port. Require receive metadata, hop 255, UDP port 5353 and valid checksums.
+
 Retain known-answer suppression, cache-flush ownership, QU questions, legacy
 unicast replies, family-specific multicast history and bounded packet sizes.
 Questions and answers sent by pods never become LAN advertisements or catalog
