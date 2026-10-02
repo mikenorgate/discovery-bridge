@@ -6,8 +6,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +65,30 @@ func TestWorkerBrokerHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// go test places its executable under a private build directory. Install
+	// the worker copy as a public executable, matching packaged /usr/bin access.
+	source, err := os.Open(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workerBinary, err := os.CreateTemp("/tmp", "discovery-bridge-worker-*.test")
+	if err != nil {
+		if closeErr := source.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Remove(workerBinary.Name()); err != nil {
+			t.Error(err)
+		}
+	}()
+	_, copyErr := io.Copy(workerBinary, source)
+	modeErr := workerBinary.Chmod(0755)
+	if err := errors.Join(copyErr, modeErr, workerBinary.Close(), source.Close()); err != nil {
+		t.Fatal(err)
+	}
+	binary = workerBinary.Name()
 	w, err := linuxnet.StartWorker(context.Background(), binary, nil, 65532, 65532, os.Stderr)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +141,7 @@ func TestWorkerDiesWithBrokerEvenWhenStopped(t *testing.T) {
 				UID int `json:"uid"`
 			}
 			if err := json.Unmarshal(reader.Bytes(), &info); err != nil || info.PID <= 1 || info.UID != 65532 {
-				t.Fatal(info, err)
+				t.Fatalf("worker acknowledgement %q: %#v: %v", reader.Text(), info, err)
 			}
 			if stopped {
 				if err := unix.Kill(info.PID, unix.SIGSTOP); err != nil {

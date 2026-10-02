@@ -172,9 +172,16 @@ func (c *Catalog) clone() *Catalog {
 
 // View constructs fresh coherent records under the accepted gateway authority.
 func (f *NodeFeed) View(now Moment) []Answer {
+	return f.ViewBlocked(now, nil)
+}
+
+// ViewBlocked additionally withholds locally claimed names and their dependencies.
+func (f *NodeFeed) ViewBlocked(now Moment, blocked map[string]bool) []Answer {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return ResponseView(f.catalog.Records(now), f.authority)
+	authority := f.authority
+	authority.Blocked = blocked
+	return ResponseView(f.catalog.Records(now), authority)
 }
 
 // ValidNonce recognizes a bounded lowercase hexadecimal request challenge.

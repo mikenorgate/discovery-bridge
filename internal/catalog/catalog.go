@@ -124,6 +124,9 @@ func Decode(data []byte, now time.Time, source *policy.SourcePolicy, translation
 	ids := make(map[string]bool)
 	for index := range s.Records {
 		r := &s.Records[index]
+		if r.Type != "A" && r.Type != "AAAA" && r.Type != "PTR" && r.Type != "SRV" && r.Type != "TXT" {
+			return s, errors.New("unsupported catalog type")
+		}
 		if r.ID == "" || len(r.ID) > 128 || ids[r.ID] || !LocalName(r.Name) || r.Source == "" || len(r.Source) > 128 || len(sources[r.Source]) == 0 || r.Data == "" || len(r.Data) > 4096 || r.Expires.IsZero() || len(r.NativeID) > 128 || (r.NativeID != "" && s.Schema != 2) {
 			return s, errors.New("invalid catalog record")
 		}
