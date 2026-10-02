@@ -2,6 +2,7 @@
 package state
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -10,11 +11,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/miekg/dns"
+	"golang.org/x/text/encoding/unicode"
 	_ "modernc.org/sqlite" // Registers the CGo-free SQLite driver.
 )
 
@@ -22,9 +22,10 @@ var prefixPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,7}$`)
 
 // Identities owns SQLite identities and reservations without changing their schema.
 type Identities struct {
-	mu     sync.Mutex
-	db     *sql.DB
-	prefix string
+	mu         sync.Mutex
+	db         *sql.DB
+	prefix     string
+	suppressed map[string]bool
 }
 
 // Open opens an installation-owned database with its configured host alias prefix.
@@ -49,10 +50,10 @@ func Open(ctx context.Context, path, prefix string) (*Identities, error) {
 			return nil, errors.Join(err, db.Close())
 		}
 	}
-	return &Identities{db: db, prefix: prefix}, nil
+	return &Identities{db: db, prefix: prefix, suppressed: make(map[string]bool)}, nil
 }
 
-func canonicalWire(name string) ([]byte, error) {
+func nameWire(name string) ([]byte, error) {
 	if _, ok := dns.IsDomainName(name); !ok {
 		return nil, errors.New("invalid DNS identity name")
 	}
@@ -62,6 +63,14 @@ func canonicalWire(name string) ([]byte, error) {
 		return nil, err
 	}
 	buffer = buffer[:n]
+	return buffer, nil
+}
+
+func canonicalWire(name string) ([]byte, error) {
+	buffer, err := nameWire(name)
+	if err != nil {
+		return nil, err
+	}
 	for index := 0; index < len(buffer) && buffer[index] != 0; {
 		length := int(buffer[index])
 		index++
@@ -80,6 +89,10 @@ func (s *Identities) Alias(ctx context.Context, source, name string, collision b
 		return "", "", errors.New("source identity required")
 	}
 	original, err := canonicalWire(name)
+	if err != nil {
+		return "", "", err
+	}
+	display, err := nameWire(name)
 	if err != nil {
 		return "", "", err
 	}
@@ -120,15 +133,18 @@ func (s *Identities) Alias(ctx context.Context, source, name string, collision b
 		if len(labels) == 2 {
 			alias = s.prefix + ending + ".local."
 		} else {
-			length := int(original[0])
-			label := strings.ToValidUTF8(string(original[1:1+length]), "\ufffd")
-			for len(label) > 41 {
-				_, size := utf8.DecodeLastRuneInString(label)
-				label = label[:len(label)-size]
+			length := int(display[0])
+			decoded, err := unicode.UTF8.NewDecoder().String(string(display[1 : 1+length]))
+			if err != nil {
+				return "", "", err
 			}
-			label += "-" + ending
-			wire := append([]byte{byte(len(label))}, []byte(label)...)
-			wire = append(wire, original[1+length:]...)
+			label := []rune(decoded)
+			for len(string(label)) > 41 {
+				label = label[:len(label)-1]
+			}
+			text := string(label) + "-" + ending
+			wire := append([]byte{byte(len(text))}, []byte(text)...)
+			wire = append(wire, display[1+length:]...)
 			alias, _, err = dns.UnpackDomainName(wire, 0)
 			if err != nil {
 				return "", "", err
@@ -175,10 +191,22 @@ func (s *Identities) Owns(ctx context.Context, name string) (bool, error) {
 
 // Original resolves a current alias to its observed source and canonical name.
 func (s *Identities) Original(ctx context.Context, alias string) (source, name string, err error) {
-	var wire []byte
-	err = s.db.QueryRowContext(ctx, "SELECT source,original FROM identities WHERE alias=?", dns.Fqdn(alias)).Scan(&source, &wire)
+	queried, err := canonicalWire(alias)
 	if err != nil {
 		return "", "", err
+	}
+	var wire []byte
+	var current string
+	err = s.db.QueryRowContext(ctx, "SELECT source,original,alias FROM identities JOIN reservations USING(identity) WHERE name=?", queried).Scan(&source, &wire, &current)
+	if err != nil {
+		return "", "", err
+	}
+	reserved, err := canonicalWire(current)
+	if err != nil {
+		return "", "", err
+	}
+	if !bytes.Equal(reserved, queried) {
+		return "", "", sql.ErrNoRows
 	}
 	name, n, err := dns.UnpackDomainName(wire, 0)
 	if err != nil {
