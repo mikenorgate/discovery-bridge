@@ -202,9 +202,6 @@ func (n *Namespace) Socket(iface string, family int) (*os.File, error) {
 				return err
 			}
 		}
-		if err := unix.BindToDevice(fd, iface); err != nil {
-			return err
-		}
 		request, err := unix.NewIfreq(iface)
 		if err != nil {
 			return err

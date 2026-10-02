@@ -4,6 +4,7 @@ package linuxnet_test
 
 import (
 	"context"
+	"net"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/linuxnet"
 	"golang.org/x/sys/unix"
 )
@@ -89,7 +91,50 @@ func TestNamespaceSocketsAndRestoration(t *testing.T) {
 		default:
 			t.Fatal("unexpected socket family")
 		}
-		if err := socket.Close(); err != nil {
+		duplicate, err := unix.FcntlInt(socket.Fd(), unix.F_DUPFD_CLOEXEC, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		endpoint, err := linuxnet.Adopt(os.NewFile(uintptr(duplicate), "adopted pod socket"), linuxnet.Description{Index: details.Index, Family: family, Addresses: details.Addresses})
+		if err != nil {
+			t.Fatal("socket adoption", err)
+		}
+		message := dns.Msg{MsgHdr: dns.MsgHdr{Response: true, Authoritative: true}}
+		rr, err := dns.NewRR("sensor.local. 5 IN A 192.0.2.43")
+		if err != nil {
+			t.Fatal(err)
+		}
+		message.Answer = []dns.RR{rr}
+		wire, err := message.Pack()
+		if err != nil {
+			t.Fatal(err)
+		}
+		peer := &net.UDPAddr{IP: net.ParseIP("192.0.2.42"), Port: 5353}
+		if family == 6 {
+			peer.IP = net.ParseIP("2001:db8:1::42")
+		}
+		if err := endpoint.Socket.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		if err := endpoint.Send(wire, peer, true); err != nil {
+			t.Fatal("namespace-bound reply", err)
+		}
+		received, actualPeer, err := endpoint.Receive()
+		if err != nil || len(received) != len(wire) || actualPeer.Port != 5353 {
+			t.Fatal("pod receive metadata", actualPeer, err)
+		}
+		wire[2] &^= 0x80
+		if err := endpoint.Send(wire, peer, true); err == nil {
+			t.Fatal("question was sent into pod namespace")
+		}
+		wire[2] |= 0x80
+		if err := linuxnet.Revoke(socket); err != nil {
+			t.Fatal(err)
+		}
+		if err := endpoint.Send(wire, peer, true); err == nil {
+			t.Fatal("broker shutdown left worker socket usable")
+		}
+		if err := endpoint.Close(); err != nil {
 			t.Fatal(err)
 		}
 	}

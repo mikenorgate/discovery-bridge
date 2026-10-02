@@ -36,6 +36,9 @@ type Feed struct {
 
 // NewFeed acquires the exclusive persistent gateway generation.
 func NewFeed(ctx context.Context, source *policy.SourcePolicy, path string) (*Feed, error) {
+	if source == nil {
+		return nil, errors.New("explicit source policy required")
+	}
 	g, err := state.OpenGeneration(ctx, path)
 	if err != nil {
 		return nil, err

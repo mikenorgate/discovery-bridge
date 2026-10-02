@@ -97,11 +97,60 @@ func TestWorkerBrokerHelper(t *testing.T) {
 	if err != nil || len(fds) != 0 {
 		t.Fatal(err, fds)
 	}
+	if os.Getenv("DISCOVERY_BRIDGE_TEST_STOP_WORKER") == "1" {
+		if err := w.Signal(unix.SIGSTOP); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(time.Second)
+		for {
+			status, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(w.PID), "stat"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, rest, _ := strings.Cut(string(status), ") ")
+			if strings.HasPrefix(rest, "T ") {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("worker did not stop")
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil || !strings.Contains(string(status), "Uid:\t0\t0\t0\t0") {
+		t.Fatal("supervisor changed the broker leader's credentials", err)
+	}
+	if os.Getenv("DISCOVERY_BRIDGE_TEST_CLOSE_WORKER") == "1" {
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-w.Done:
+			return
+		case <-time.After(time.Second):
+			t.Fatal("stopped worker survived explicit close")
+		}
+	}
 	if _, err := fmt.Fprintln(os.Stdout, string(data)); err != nil {
 		t.Fatal(err)
 	}
 	// The supervisor remains alive until the outer test kills this broker.
 	<-w.Done
+}
+
+func TestWorkerCloseStopped(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(ctx, binary, "-test.run=^TestWorkerBrokerHelper$")
+	command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_BROKER=1", "DISCOVERY_BRIDGE_TEST_STOP_WORKER=1", "DISCOVERY_BRIDGE_TEST_CLOSE_WORKER=1")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("stopped worker close: %v: %s", err, output)
+	}
 }
 
 func TestWorkerDiesWithBrokerEvenWhenStopped(t *testing.T) {
@@ -118,6 +167,9 @@ func TestWorkerDiesWithBrokerEvenWhenStopped(t *testing.T) {
 			}
 			command := exec.CommandContext(ctx, binary, "-test.run=^TestWorkerBrokerHelper$")
 			command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_BROKER=1")
+			if stopped {
+				command.Env = append(command.Env, "DISCOVERY_BRIDGE_TEST_STOP_WORKER=1")
+			}
 			command.Stderr = os.Stderr
 			stdout, err := command.StdoutPipe()
 			if err != nil {
@@ -142,11 +194,6 @@ func TestWorkerDiesWithBrokerEvenWhenStopped(t *testing.T) {
 			}
 			if err := json.Unmarshal(reader.Bytes(), &info); err != nil || info.PID <= 1 || info.UID != 65532 {
 				t.Fatalf("worker acknowledgement %q: %#v: %v", reader.Text(), info, err)
-			}
-			if stopped {
-				if err := unix.Kill(info.PID, unix.SIGSTOP); err != nil {
-					t.Fatal(err)
-				}
 			}
 			if err := command.Process.Kill(); err != nil {
 				t.Fatal(err)

@@ -52,12 +52,28 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install --yes iproute2 util-linux
-          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet
+          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet ./internal/node
+      - name: Restricted container integration
+        run: |
+          docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
+          for package in linuxnet node; do
+            CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
+            # NET_ADMIN is used by the test harness to create isolated interfaces.
+            # Worker permissions remain empty; the broker needs no CAP_KILL.
+            docker run --rm --network none --read-only --tmpfs /tmp --tmpfs /run \
+              --memory 192m --pids-limit 64 --cap-drop ALL \
+              --cap-add SYS_ADMIN --cap-add SYS_PTRACE --cap-add SETUID \
+              --cap-add SETGID --cap-add NET_ADMIN \
+              --security-opt apparmor=unconfined --security-opt no-new-privileges \
+              --volume "$RUNNER_TEMP/$package.test:/lab/test:ro" \
+              --entrypoint /lab/test discovery-bridge-integration -test.v
+          done
       - name: Python reference behavior
         run: |
           python3 -m pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt
           make reference
           python3 tests/reference_views.py --check
+          go test -race -tags reference -count=1 ./internal/gateway
 
   lint:
     name: Lint and vulnerabilities

@@ -141,7 +141,7 @@ func (n *Node) Validate() error {
 	if n.PodInterface == "" {
 		n.PodInterface = "eth0"
 	}
-	if !n.Enabled || !resource.MatchString(n.Node) || !Command(n.Kubectl) || !Command(n.Crictl) || !filepath.IsAbs(n.Kubeconfig) || !filepath.IsAbs(n.HostProc) || !strings.HasPrefix(n.RuntimeEndpoint, "unix:///") || n.WorkerUID == 0 || n.WorkerGID == 0 || n.Rules == nil || len(n.Rules) > 64 || len(n.OptInKey) > 253 || strings.ContainsAny(n.OptInKey, "\x00\n ") || len(n.PodInterface) < 1 || len(n.PodInterface) > 15 || strings.ContainsAny(n.PodInterface, "/\x00\n ") {
+	if !n.Enabled || !resource.MatchString(n.Node) || !Command(n.Kubectl) || !Command(n.Crictl) || !filepath.IsAbs(n.Kubeconfig) || !filepath.IsAbs(n.HostProc) || !strings.HasPrefix(n.RuntimeEndpoint, "unix:///") || n.WorkerUID == 0 || n.WorkerGID == 0 || n.WorkerUID == ^uint32(0) || n.WorkerGID == ^uint32(0) || n.Rules == nil || len(n.Rules) > 64 || len(n.OptInKey) > 253 || strings.ContainsAny(n.OptInKey, "\x00\n ") || len(n.PodInterface) < 1 || len(n.PodInterface) > 15 || strings.ContainsAny(n.PodInterface, "/\x00\n ") {
 		return errors.New("explicit enabled node configuration required")
 	}
 	for _, r := range n.Rules {

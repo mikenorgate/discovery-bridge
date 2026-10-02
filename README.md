@@ -5,11 +5,11 @@ explicitly published Services. Avahi owns LAN browsing, probing and publication.
 The adapters retain record expiry, apply address policy and answer opted-in pods
 without forwarding LAN questions into them or advertising individual pods.
 
-The Go port is in progress. The CLI currently provides registry descriptions;
-the tested Go libraries implement source policy, translation eligibility,
-namespace socket creation and descriptor passing. Runtime daemons and release
-packages are still being implemented. The Python snapshot is a behavioral
-reference, with synthetic fixtures; it is not the new deployment runtime.
+The Go port is in progress. The binary provides the node broker and its
+unprivileged responder, plus registry descriptions. Tested libraries cover
+leased catalogs, DNS-SD responses, address policy, HTTP feeds and SQLite state.
+Router adapters and release packages are still being implemented. The Python
+snapshot provides a behavioral reference with synthetic fixtures.
 
 ## Build
 
@@ -36,8 +36,13 @@ PYTHONDONTWRITEBYTECODE=1 ../../.venv/bin/python -m unittest discover -s tests -
 
 Linux namespace integration tests require root and an isolated test environment
 with `iproute2` and `util-linux`. CI runs them on disposable native AMD64 and
-ARM64 runners. `go test -tags integration ./internal/linuxnet` creates disposable
-network namespaces and verifies IPv4/IPv6 mDNS sockets and namespace restoration.
+ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/node`
+checks IPv4/IPv6 pod replies, namespace restoration, socket withdrawal and worker
+cleanup. CI also runs these checks in a restricted Debian 13 container.
+
+With the reference dependencies installed, run
+`go test -tags reference ./internal/gateway` to check the Go client against the
+Python router's catalog and lookup endpoints.
 
 ## Configuration and deployment
 

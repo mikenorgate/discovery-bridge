@@ -153,6 +153,9 @@ func CatalogAPI(feed *Feed, lookups *Lookups) Handler {
 		}
 		switch target {
 		case "/v1/catalog":
+			if feed == nil {
+				return failure(503)
+			}
 			var request struct {
 				Schema int    `json:"schema"`
 				Nonce  string `json:"nonce"`
@@ -166,6 +169,9 @@ func CatalogAPI(feed *Feed, lookups *Lookups) Handler {
 			}
 			return 200, payload
 		case "/v1/lookup":
+			if lookups == nil {
+				return failure(503)
+			}
 			count, err := lookups.Submit(ctx, data)
 			if errors.Is(err, ErrBusy) {
 				return failure(429)
