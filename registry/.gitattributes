@@ -1,0 +1,4 @@
+# Preserve the exact upstream bytes verified by manifest.json.
+iana.csv -text -whitespace
+COPYING.avahi -text -whitespace
+service-types -text -whitespace

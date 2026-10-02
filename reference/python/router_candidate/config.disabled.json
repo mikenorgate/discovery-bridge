@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "interfaces": ["lan-vlan1", "lan-vlan11", "lan-vlan22", "lan-vlan23", "lan-vlan55", "lan-vlan98"],
+  "prefixes": {},
+  "forbidden": [],
+  "bootstrap": [["_esphomelib._tcp.local.", 12], ["_home-assistant._tcp.local.", 12]]
+}

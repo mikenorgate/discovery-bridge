@@ -1,0 +1,8 @@
+/dist/
+/.venv/
+/build-inputs/
+/reference/python/build-inputs/
+__pycache__/
+*.pyc
+coverage.out
+*.test

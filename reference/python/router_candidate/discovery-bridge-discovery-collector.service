@@ -1,0 +1,29 @@
+[Unit]
+Description=Discovery Bridge verified LAN mDNS collector (staged candidate)
+After=discovery-bridge-publisher.service
+Requires=discovery-bridge-publisher.service
+Before=example-router-network-base.service
+ConditionPathExists=/etc/discovery-bridge/config.json
+
+[Service]
+Type=notify
+User=discovery-bridge-collector
+Group=discovery-bridge
+UMask=0007
+WorkingDirectory=/usr/lib/discovery-bridge
+ExecStart=/usr/bin/python3 -m discovery.runtime collector --config /etc/discovery-bridge/config.json --state /var/lib/discovery-bridge/identities.db --socket /run/discovery-bridge/publisher.sock
+WatchdogSec=3s
+WatchdogSignal=SIGKILL
+TimeoutStopSec=2s
+Restart=on-failure
+RestartSec=1s
+NoNewPrivileges=yes
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+ProtectSystem=strict
+ReadWritePaths=/var/lib/discovery-bridge
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+MemoryMax=128M
+TasksMax=32

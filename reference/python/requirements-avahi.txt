@@ -1,0 +1,3 @@
+-r requirements.txt
+# Router-side D-Bus adapter only; pure Python, no application compilation.
+dbus-next==0.2.3 --hash=sha256:58948f9aff9db08316734c0be2a120f6dc502124d9642f55e90ac82ffb16a18b

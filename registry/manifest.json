@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "revision": 1,
+  "retrieved": "2026-09-28",
+  "files": {
+    "service-types": {
+      "url": "https://raw.githubusercontent.com/avahi/avahi/v0.8/service-type-database/service-types",
+      "sha256": "b51d87918737c083d11a1a38bf9dab85ab10a57733f53880edbc3b9164a3b53b",
+      "bytes": 5327
+    },
+    "COPYING.avahi": {
+      "url": "https://raw.githubusercontent.com/avahi/avahi/v0.8/LICENSE",
+      "sha256": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
+      "bytes": 26527
+    },
+    "iana.csv": {
+      "url": "https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.csv",
+      "sha256": "34328ed0940d889207de6da29bf0e6e1438d604483c8e1ffb03dceab8f7ec26f",
+      "bytes": 1157052
+    }
+  }
+}

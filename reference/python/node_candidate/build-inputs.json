@@ -1,0 +1,17 @@
+{
+  "base": "docker.io/library/debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132",
+  "debian_snapshot": "20260918T000000Z",
+  "security_snapshot": "20260918T000000Z",
+  "kubectl_version": "v1.36.3",
+  "crictl_version": "v1.36.0",
+  "architectures": {
+    "amd64": {
+      "kubectl": "ebbd080e7c2e275093b55915722043257eb24004363e20acb3c4d71919f88336",
+      "crictl_archive": "83855e114566a8a8c44c548d515670f51de3a5e1da8b2effb59870e2f10c25a3"
+    },
+    "arm64": {
+      "kubectl": "3d86f24401c41ae5a46ac50eef8865fe891d3647d324a0836f6c63757a126e62",
+      "crictl_archive": "68328594ccf780a80ae2b092d9f6ce484eec7cf540c275242e8fd954bfd95332"
+    }
+  }
+}
