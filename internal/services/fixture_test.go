@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
 	"github.com/mikenorgate/discovery-bridge/internal/policy"
+	"github.com/mikenorgate/discovery-bridge/tests/fixtures"
 )
 
 func TestServiceProducerAndReceiverWireFixture(t *testing.T) {
@@ -49,7 +49,7 @@ func TestServiceProducerAndReceiverWireFixture(t *testing.T) {
 	if err != nil || len(snapshot.Services) != 1 {
 		t.Fatal(snapshot, err)
 	}
-	output, err := os.ReadFile("../../tests/fixtures/services.json")
+	output, err := fixtures.Files.ReadFile("services.json")
 	if err != nil {
 		t.Fatal(err)
 	}

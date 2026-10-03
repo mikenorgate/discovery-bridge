@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/policy"
+	"github.com/mikenorgate/discovery-bridge/tests/fixtures"
 )
 
 type expectedAnswer struct {
@@ -30,7 +30,7 @@ func sourcePolicy(t *testing.T) *policy.SourcePolicy {
 }
 
 func TestFixtureViews(t *testing.T) {
-	data, err := os.ReadFile("../../tests/fixtures/views.json")
+	data, err := fixtures.Files.ReadFile("views.json")
 	if err != nil {
 		t.Fatal(err)
 	}

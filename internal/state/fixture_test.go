@@ -5,18 +5,18 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/state"
+	"github.com/mikenorgate/discovery-bridge/tests/fixtures"
 )
 
 func TestAliasAndSQLiteFixtures(t *testing.T) {
 	ctx := context.Background()
-	data, err := os.ReadFile("../../tests/fixtures/identities.json")
+	data, err := fixtures.Files.ReadFile("identities.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestAliasAndSQLiteFixtures(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	data, err = os.ReadFile("../../tests/fixtures/identity-state.json")
+	data, err = fixtures.Files.ReadFile("identity-state.json")
 	if err != nil {
 		t.Fatal(err)
 	}

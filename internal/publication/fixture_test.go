@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -17,6 +16,7 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/avahi"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
 	"github.com/mikenorgate/discovery-bridge/internal/state"
+	"github.com/mikenorgate/discovery-bridge/tests/fixtures"
 )
 
 func TestPublicationFrameFixtureAndSQLiteOwnership(t *testing.T) {
@@ -42,7 +42,7 @@ func TestPublicationFrameFixtureAndSQLiteOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	output, err := os.ReadFile("../../tests/fixtures/publication.json")
+	output, err := fixtures.Files.ReadFile("publication.json")
 	if err != nil {
 		t.Fatal(err)
 	}
