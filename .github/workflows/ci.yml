@@ -134,7 +134,7 @@ jobs:
               --cap-drop ALL --security-opt no-new-privileges "${capabilities[@]}" \
               --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \
               --volume "$RUNNER_TEMP/container-$package.test:/lab/test:ro" \
-              --entrypoint /lab/test localhost/discovery-bridge-qualified:${{ matrix.arch }} -test.v
+              --entrypoint /lab/test localhost/discovery-bridge-qualified:${{ matrix.arch }} -test.timeout=90s -test.v
           done
 
   lint:
