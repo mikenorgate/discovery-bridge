@@ -31,6 +31,30 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && (os.Args[1] == "fixture-kubectl" || os.Args[1] == "fixture-crictl") {
+		data, err := os.ReadFile(os.Getenv("DISCOVERY_BRIDGE_NODE_TEST_SOURCE"))
+		if err != nil {
+			panic(err)
+		}
+		var source map[string]json.RawMessage
+		if err := json.Unmarshal(data, &source); err != nil {
+			panic(err)
+		}
+		key := "pods"
+		if os.Args[1] == "fixture-crictl" {
+			key = "sandboxes"
+			if len(os.Args[len(os.Args)-1]) == 64 {
+				key = "status"
+			}
+		} else if os.Args[len(os.Args)-1] == "--output=json" {
+			_, _ = os.Stdout.WriteString(`{"clusters":[{"cluster":{"server":"https://api.example"}}]}`)
+			os.Exit(0)
+		}
+		if _, err := os.Stdout.Write(source[key]); err != nil {
+			panic(err)
+		}
+		os.Exit(0)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "worker" {
 		flags := flag.NewFlagSet("worker", flag.ExitOnError)
 		fd, parent := flags.Int("control-fd", -1, ""), flags.Int("parent", -1, "")
@@ -44,6 +68,175 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func TestActualBrokerCLIAdmitsAndWithdrawsPod(t *testing.T) {
+	binary := os.Getenv("DISCOVERY_BRIDGE_TEST_BINARY")
+	if binary == "" {
+		t.Skip("actual executable qualification uses DISCOVERY_BRIDGE_TEST_BINARY")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	t.Cleanup(cancel)
+	ns, pid := podNamespace(t, ctx)
+	settings := testSettings(t)
+	settings.PodInterface = "dummy0"
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Kubectl, settings.Crictl = []string{self, "fixture-kubectl"}, []string{self, "fixture-crictl"}
+	directory := t.TempDir()
+	source := filepath.Join(directory, "api.json")
+	id := strings.Repeat("a", 64)
+	raw := strings.Replace(selectedPod, `"2001:db8:1::42"`, `"2001:db8:2::42"},{"ip":"198.51.100.42"`, 1)
+	writeSource := func(admitted bool) {
+		t.Helper()
+		pod := raw
+		if !admitted {
+			pod = strings.Replace(pod, `"discovery-bridge-client":"true"`, `"discovery-bridge-client":"false"`, 1)
+		}
+		value := map[string]json.RawMessage{
+			"pods":      []byte(`{"kind":"PodList","apiVersion":"v1","metadata":{},"items":[` + pod + `]}`),
+			"sandboxes": []byte(`{"items":[{"id":"` + id + `","metadata":{"uid":"pod-1"}}]}`),
+			"status":    fmt.Appendf(nil, `{"status":{"id":%q,"state":"SANDBOX_READY","metadata":{"uid":"pod-1","name":"automation","namespace":"apps"},"network":{"ip":"2001:db8:2::42","additionalIps":[{"ip":"198.51.100.42"}]},"linux":{"namespaces":{"options":{"network":"POD"}}}},"info":{"pid":%d,"processStatus":"running","netNamespaceClosed":false}}`, id, pid),
+		}
+		data, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(source+".new", data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(source+".new", source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeSource(true)
+	p, err := policy.New(settings.Sources, settings.Forbidden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed, err := gateway.NewFeed(ctx, p, filepath.Join(directory, "generation.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = feed.Close() })
+	rr, err := dns.NewRR("sensor.local. 30 IN AAAA 2001:db8:1::43")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := catalog.Now()
+	if err := feed.Publish([]catalog.Answer{{RR: rr, Source: "lan-a"}}, now.Wall, now); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Gateway = config.Endpoint{Host: "127.0.0.1", Port: listener.Addr().(*net.TCPAddr).Port}
+	apiCtx, stopAPI := context.WithCancel(ctx)
+	apiDone := make(chan error, 1)
+	go func() {
+		apiDone <- gateway.Serve(apiCtx, listener, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}, gateway.CatalogAPI(feed, nil))
+	}()
+	t.Cleanup(func() { stopAPI(); <-apiDone })
+	data, err := json.Marshal(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "node.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(ctx, binary, "broker", "--config", path)
+	command.Env = append(os.Environ(), "GOMAXPROCS=2", "DISCOVERY_BRIDGE_NODE_TEST_SOURCE="+source)
+	command.Stderr = os.Stderr
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = command.Process.Kill(); _ = command.Wait() })
+	addresses := []netip.Addr{netip.MustParseAddr("198.51.100.42"), netip.MustParseAddr("2001:db8:2::42")}
+	details, err := ns.Inspect("dummy0", addresses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := ns.Socket("dummy0", 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := linuxnet.Adopt(file, linuxnet.Description{Index: details.Index, Family: 6, Addresses: addresses})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	query := dns.Msg{Question: []dns.Question{{Name: "sensor.local.", Qtype: dns.TypeAAAA, Qclass: dns.ClassINET}}}
+	wire, err := query.Pack()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawSocket, err := client.Socket.SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := &unix.SockaddrInet6{Port: 5353, ZoneId: uint32(details.Index), Addr: netip.MustParseAddr("ff02::fb").As16()}
+	control := (&ipv6.ControlMessage{Src: net.IP(addresses[1].AsSlice()), IfIndex: details.Index}).Marshal()
+	answer := func() bool {
+		t.Helper()
+		var sendErr error
+		if err := rawSocket.Control(func(fd uintptr) {
+			_, sendErr = unix.SendmsgN(int(fd), wire, control, group, 0)
+		}); err != nil || sendErr != nil {
+			t.Fatal(errors.Join(err, sendErr))
+		}
+		if err := client.Socket.SetReadDeadline(time.Now().Add(200 * time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			packet, _, err := client.Receive()
+			if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+				return false
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			message, err := responderMessage(packet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if message.Response && len(message.Answer) > 0 {
+				address, ok := message.Answer[0].(*dns.AAAA)
+				if !ok || address.Header().Name != "sensor.local." || !address.AAAA.Equal(net.ParseIP("2001:db8:1::43")) {
+					t.Fatal("actual broker changed the native pod answer", message)
+				}
+				return true
+			}
+			if !message.Response && string(packet) != string(wire) {
+				t.Fatal("actual broker delivered a foreign query into the pod", message)
+			}
+		}
+	}
+	for deadline := time.Now().Add(4 * time.Second); !answer(); {
+		if time.Now().After(deadline) {
+			t.Fatal("actual broker did not deliver to the admitted pod")
+		}
+	}
+	writeSource(false)
+	// Wait for the next ten-second API cycle. No queries during this interval
+	// can confuse multicast suppression with revocation; address evidence stays
+	// live for thirty seconds, independently of pod admission.
+	timer := time.NewTimer(11 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-timer.C:
+	}
+	for range 3 {
+		if answer() {
+			t.Fatal("actual broker kept delivering after opt-in withdrawal")
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 func podNamespace(t *testing.T, ctx context.Context) (*linuxnet.Namespace, int) {

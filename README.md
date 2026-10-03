@@ -14,8 +14,8 @@ interface-scoped Avahi observations with independent wire expiry.
 Router tests use a real Avahi daemon and separate unprivileged processes.
 The collector samples existing TAYGA readiness without allocating mappings.
 Selected ready Services publish only admitted VIPs and external ports.
-Native archives and Debian packages share one versioned executable; container
-releases are still being implemented. The Python snapshot provides a
+Native archives, Debian packages and OCI images share one versioned executable;
+the release workflow is still being implemented. The Python snapshot provides a
 behavioral reference with synthetic fixtures.
 
 ## Build
@@ -67,8 +67,8 @@ registry data and tests; deployment inventories and captured traffic stay with
 the operator's infrastructure repository.
 
 The [compatibility contract](docs/CONTRACT.md) records the behavior the port must
-preserve. Binaries, Debian packages and multi-architecture containers will share
-one versioned source build. Router deployment and Kubernetes reconciliation
+preserve. Binaries, Debian packages and platform images share one versioned
+source build. Router deployment and Kubernetes reconciliation
 remain the infrastructure owner's responsibility.
 
 Router roles share one explicit configuration:

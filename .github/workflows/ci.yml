@@ -25,7 +25,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -115,6 +115,27 @@ jobs:
           make reference
           python3 tests/reference_views.py --check
           go test -race -tags reference -count=1 ./internal/gateway ./internal/state ./internal/publication ./internal/services
+      - name: Qualified offline OCI image and both container roles
+        run: |
+          sudo apt-get install --yes podman
+          python3 packaging/container.py prepare --arch ${{ matrix.arch }}
+          sudo python3 packaging/container.py build --arch ${{ matrix.arch }}
+          sudo python3 tests/check_container.py --arch ${{ matrix.arch }}
+          for package in node services; do
+            CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/container-$package.test" "./internal/$package"
+            capabilities=()
+            if [ "$package" = node ]; then
+              capabilities+=(--user 0 --cap-add SYS_ADMIN --cap-add SYS_PTRACE)
+              capabilities+=(--cap-add SETUID --cap-add SETGID --cap-add NET_ADMIN)
+              capabilities+=(--security-opt apparmor=unconfined --tmpfs /run)
+            fi
+            sudo podman run --rm --network none --read-only \
+              --tmpfs /tmp:rw,nosuid,nodev,exec --memory 192m --pids-limit 64 \
+              --cap-drop ALL --security-opt no-new-privileges "${capabilities[@]}" \
+              --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \
+              --volume "$RUNNER_TEMP/container-$package.test:/lab/test:ro" \
+              --entrypoint /lab/test localhost/discovery-bridge-qualified:${{ matrix.arch }} -test.v
+          done
 
   lint:
     name: Lint and vulnerabilities

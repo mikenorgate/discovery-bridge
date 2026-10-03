@@ -1,0 +1,10 @@
+*
+!Containerfile
+!bin/
+!bin/discovery-bridge
+!bin/kubectl
+!bin/crictl
+!licenses/
+!licenses/*
+!metadata.json
+!SHA256SUMS

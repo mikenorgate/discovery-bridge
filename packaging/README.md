@@ -20,6 +20,30 @@ contents. It leaves the units disabled and installs the example under
 Package upgrades leave service restart scheduling to the infrastructure owner.
 Stop the previous publisher before replacing a running installation.
 
+Build a native container and OCI archive from that executable with Podman:
+
+```sh
+make container
+```
+
+`packaging/container-inputs.json` pins the Debian 13 base, signed Debian
+snapshots, CLI versions and download checksums. The generated context contains
+only the three binaries, licenses and build metadata. The image includes `ip`
+and CA certificates, defaults to UID/GID 65532 and runs `version` until a role
+is selected. Select `broker --config <path>` or
+`kubernetes-publisher --config <path>` for deployment. The broker requires root
+and its existing namespace capabilities; the Service producer needs none.
+Supply configuration and API/runtime access through the infrastructure owner.
+
+The builder exports under `dist/releases/<architecture>` and loads that OCI
+archive as `localhost/discovery-bridge-qualified:<architecture>`. Checks verify
+every referenced blob, architecture, imported executable bytes, CLI versions
+and image defaults. CI runs the actual broker and Service producer from this
+imported image with isolated API/CRI JSON fixtures. It tests pod admission and
+withdrawal, native replies, Service readiness withdrawal, independent expiry
+and recovery. Publishing the multi-architecture index and versioned release
+assets remains in progress.
+
 This directory provides units, account definitions, shared-state permissions
 and D-Bus policy for the Debian package. Package installation must leave
 discovery disabled and supply no active router configuration. The example is an operator
