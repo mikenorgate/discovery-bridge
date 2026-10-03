@@ -68,7 +68,8 @@ registry data and tests; deployment inventories and captured traffic stay with
 the operator's infrastructure repository.
 
 The [compatibility contract](docs/CONTRACT.md) records the behavior the port must
-preserve. Binaries, Debian packages and platform images share one versioned
+preserve. The [Go/Python comparison](docs/PERFORMANCE.md) records a reproducible
+worker workload and container sizes. Binaries, Debian packages and platform images share one versioned
 source build. Router deployment and Kubernetes reconciliation
 remain the infrastructure owner's responsibility.
 
