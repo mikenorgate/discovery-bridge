@@ -57,7 +57,7 @@ jobs:
         run: |
           docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
           docker run --rm --network none --read-only \
-            --tmpfs /tmp:rw,nosuid,nodev --memory 192m --pids-limit 64 \
+            --tmpfs /tmp:rw,nosuid,nodev,exec --memory 192m --pids-limit 64 \
             --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
             --security-opt no-new-privileges \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
