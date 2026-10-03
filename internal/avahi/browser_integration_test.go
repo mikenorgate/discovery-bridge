@@ -5,6 +5,7 @@ package avahi
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +28,40 @@ import (
 func privateBus(t *testing.T) string {
 	path, _ := privateBusProcess(t)
 	return path
+}
+
+func TestStartupWaitsForAvahiInitializationAndHonorsDeadline(t *testing.T) {
+	path := privateBus(t)
+	f := avahiFixture(t, path, nil)
+	var calls atomic.Int32
+	var state atomic.Int32
+	state.Store(1)
+	if err := f.conn.ExportMethodTable(map[string]any{"GetState": func() (int32, *dbus.Error) {
+		if calls.Add(1) == 3 {
+			state.Store(2)
+		}
+		return state.Load(), nil
+	}}, "/", server); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	b, err := connectBus(ctx, path)
+	if err != nil || calls.Load() != 3 {
+		t.Fatal("initializing Avahi did not get a fresh running epoch", err, calls.Load())
+	}
+	b.close()
+	state.Store(1)
+	short, cancelShort := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancelShort()
+	if _, err := connectBus(short, path); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("startup ignored its deadline", err)
+	}
+	state.Store(4) // Failure is permanent; it must not be retried as initialization.
+	before := calls.Load()
+	if _, err := connectBus(ctx, path); err == nil || calls.Load() != before+1 {
+		t.Fatal("failed Avahi was retried or accepted", err, calls.Load()-before)
+	}
 }
 
 func privateBusProcess(t *testing.T) (string, *exec.Cmd) {

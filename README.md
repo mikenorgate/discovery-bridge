@@ -14,7 +14,8 @@ interface-scoped Avahi observations with independent wire expiry.
 Router tests use a real Avahi daemon and separate unprivileged processes.
 The collector samples existing TAYGA readiness without allocating mappings.
 Selected ready Services publish only admitted VIPs and external ports.
-Release packages are still being implemented. The Python snapshot provides a
+Native archives and Debian packages share one versioned executable; container
+releases are still being implemented. The Python snapshot provides a
 behavioral reference with synthetic fixtures.
 
 ## Build
@@ -82,7 +83,7 @@ the local D-Bus socket, identity database, publisher socket and collector accoun
 An optional gateway listener requires a numeric bind address and explicit client
 ranges. Provision the identity database and its WAL files with group write access
 for both accounts. [Router support files](packaging/README.md) define the units,
-accounts, D-Bus permissions and file setup; package assembly remains in progress.
+accounts, D-Bus permissions and file setup, together with artifact build commands.
 
 An optional `translators` object enables read-only TAYGA sampling. Supply explicit
 translation ranges, `ip` and `systemctl` commands, and either or both instance

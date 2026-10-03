@@ -79,6 +79,9 @@ func podNamespace(t *testing.T, ctx context.Context) (*linuxnet.Namespace, int) 
 
 func workerExecutable(t *testing.T) string {
 	t.Helper()
+	if binary := os.Getenv("DISCOVERY_BRIDGE_TEST_BINARY"); binary != "" {
+		return binary
+	}
 	binary, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

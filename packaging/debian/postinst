@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "$1" = configure ]; then
+    systemd-sysusers /usr/lib/sysusers.d/discovery-bridge.conf
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/discovery-bridge.conf
+fi

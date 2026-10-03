@@ -387,11 +387,16 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 	}
 	apiSource(true)
 	role := func(name string, uid uint32) *labProcess {
-		command := exec.CommandContext(ctx, binary, "-test.run=^TestRouterRoleProcess$", "-test.v")
 		path := configPath
 		caps := []uintptr{unix.CAP_NET_RAW}
 		if name == "kubernetes-publisher" {
 			path, caps = producerConfig, nil
+		}
+		command := exec.CommandContext(ctx, binary, "-test.run=^TestRouterRoleProcess$", "-test.v")
+		if runtimeBinary := os.Getenv("DISCOVERY_BRIDGE_TEST_BINARY"); runtimeBinary != "" {
+			// setpriv establishes the same no-new-privileges boundary that
+			// systemd and the production container supply to the real binary.
+			command = exec.CommandContext(ctx, "setpriv", "--no-new-privs", runtimeBinary, name, "--config", path)
 		}
 		command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_ROLE="+name, "DISCOVERY_BRIDGE_TEST_CONFIG="+path, "DISCOVERY_KUBERNETES_TEST_SOURCE="+producerSource, "GORACE=atexit_sleep_ms=0")
 		command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: 65534, Groups: []uint32{}}, AmbientCaps: caps}

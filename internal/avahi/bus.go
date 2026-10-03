@@ -26,6 +26,8 @@ const (
 
 var uniqueOwner = regexp.MustCompile(`^:[0-9]+\.[0-9]+$`)
 
+var errInitializing = errors.New("avahi is initializing")
+
 // bus is one connection epoch. Overflow or daemon loss invalidates all its work.
 // The library's default signal handler buffers overflow in extra goroutines;
 // this handler has one fixed queue and closes the connection on overflow.
@@ -91,7 +93,11 @@ func (b *bus) DeliverSignal(_ string, _ string, signal *dbus.Signal) {
 		var state int32
 		var detail string
 		if err := dbus.Store(signal.Body, &state, &detail); err != nil || state != 2 {
-			b.fail(errors.New("avahi left running state"))
+			if err == nil && (state == 0 || state == 1) {
+				b.fail(errInitializing)
+			} else {
+				b.fail(errors.New("avahi left running state"))
+			}
 		}
 		return
 	}
@@ -103,10 +109,32 @@ func (b *bus) DeliverSignal(_ string, _ string, signal *dbus.Signal) {
 }
 
 func connectBus(ctx context.Context, path string) (*bus, error) {
+	// Avahi's systemd unit becomes active before address probing reaches RUNNING.
+	// Retry only initialization, with no observations or registrations admitted.
+	// Each failed attempt closes its epoch; an established epoch still fails
+	// immediately on state or owner loss.
+	startup, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for {
+		b, err := connectBusOnce(ctx, startup, path)
+		if !errors.Is(err, errInitializing) {
+			return b, err
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-startup.Done():
+			timer.Stop()
+			return nil, errors.Join(err, startup.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func connectBusOnce(ctx, startupContext context.Context, path string) (*bus, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 107 {
 		return nil, errors.New("absolute local Unix D-Bus socket path required")
 	}
-	startup, cancel := context.WithTimeout(ctx, callTimeout)
+	startup, cancel := context.WithTimeout(startupContext, callTimeout)
 	defer cancel()
 	raw, err := (&net.Dialer{}).DialContext(startup, "unix", path)
 	if err != nil {
@@ -174,7 +202,11 @@ func connectBus(ctx context.Context, path string) (*bus, error) {
 		err = b.call(startup, "/", server+".GetState").Store(&state)
 	}
 	if err == nil && (owner != current || state != 2) {
-		err = errors.New("avahi is not stable and running")
+		if owner == current && (state == 0 || state == 1) {
+			err = errInitializing
+		} else {
+			err = errors.New("avahi is not stable and running")
+		}
 	}
 	if err == nil {
 		err = b.err()

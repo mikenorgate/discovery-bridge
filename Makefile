@@ -1,4 +1,7 @@
-.PHONY: test reference build check
+.PHONY: test reference build check artifacts
+
+VERSION ?= 0.0.0-dev
+ARCH ?= $(shell go env GOARCH)
 
 test:
 	go test -race -shuffle=on ./...
@@ -9,6 +12,11 @@ reference:
 build:
 	mkdir -p dist
 	CGO_ENABLED=0 go build -trimpath -o dist/discovery-bridge ./cmd/discovery-bridge
+
+artifacts:
+	python3 packaging/build.py compile --version $(VERSION)
+	python3 packaging/build.py package --version $(VERSION) --arch $(ARCH)
+	python3 tests/check_artifacts.py --arch $(ARCH)
 
 check:
 	python3 tests/check_public.py

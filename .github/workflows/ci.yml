@@ -46,8 +46,8 @@ jobs:
         run: |
           go vet ./...
           go test -race -shuffle=on -count=1 ./...
-          make build
-          dist/discovery-bridge version
+          make artifacts VERSION=0.0.0-ci ARCH=${{ matrix.arch }}
+          dist/native/${{ matrix.arch }}/discovery-bridge version
       - name: Isolated namespace integration
         run: |
           sudo apt-get update -qq
@@ -56,12 +56,22 @@ jobs:
       - name: Restricted container integration
         run: |
           docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
+          docker run --rm --network none --memory 192m --pids-limit 64 \
+            --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
+            --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges \
+            --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
+            discovery-bridge-integration python3 tests/check_debian_install.py \
+            dist/releases/${{ matrix.arch }}/discovery-bridge_0.0.0-ci_${{ matrix.arch }}.deb
+          docker build --tag discovery-bridge-package --file tests/Containerfile.package \
+            --build-arg PACKAGE=discovery-bridge_0.0.0-ci_${{ matrix.arch }}.deb \
+            dist/releases/${{ matrix.arch }}
           docker run --rm --network none --read-only \
             --tmpfs /tmp:rw,nosuid,nodev,exec --memory 192m --pids-limit 64 \
             --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
             --security-opt no-new-privileges \
+            --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
-            discovery-bridge-integration python3 tests/check_router_support.py
+            discovery-bridge-package python3 tests/check_router_support.py
           for package in linuxnet node avahi observation publication router translation; do
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
             capabilities=()
@@ -83,9 +93,22 @@ jobs:
               --cap-add SETGID --cap-add NET_ADMIN \
               "${capabilities[@]}" \
               --security-opt apparmor=unconfined --security-opt no-new-privileges \
+              --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \
               --volume "$RUNNER_TEMP/$package.test:/lab/test:ro" \
-              --entrypoint /lab/test discovery-bridge-integration -test.v
+              --entrypoint /lab/test discovery-bridge-package -test.v
           done
+      - name: Installed systemd unit qualification
+        run: |
+          trap 'docker rm -f bridge-systemd >/dev/null 2>&1' EXIT
+          docker run --detach --name bridge-systemd --hostname bridge-fixture \
+            --network none --privileged --cgroupns private --memory 256m --pids-limit 128 \
+            --volume "$GITHUB_WORKSPACE:/source:ro" \
+            discovery-bridge-package /lib/systemd/systemd --unit=multi-user.target --log-target=console
+          for attempt in $(seq 1 50); do
+            if docker exec bridge-systemd systemctl show --property Version --value >/dev/null 2>&1; then break; fi
+            sleep 0.1
+          done
+          docker exec bridge-systemd python3 /source/tests/check_systemd.py
       - name: Python reference behavior
         run: |
           python3 -m pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt

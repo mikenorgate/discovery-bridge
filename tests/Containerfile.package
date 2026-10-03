@@ -1,0 +1,5 @@
+# Disposable qualification image, built from the pinned integration fixture.
+FROM discovery-bridge-integration
+ARG PACKAGE
+COPY ${PACKAGE} /tmp/discovery-bridge.deb
+RUN dpkg --install /tmp/discovery-bridge.deb && rm /tmp/discovery-bridge.deb

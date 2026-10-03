@@ -1,5 +1,6 @@
 """Qualify account and SQLite file setup in a disposable system root."""
 import json
+import os
 from pathlib import Path
 import shutil
 import stat
@@ -48,7 +49,7 @@ def main():
         assert (state / 'identities.db.feed').stat().st_uid == int(users[names[0]][2])
         binary = root / 'usr/bin/discovery-bridge'
         binary.parent.mkdir(parents=True)
-        shutil.copy2(ROOT / 'dist/discovery-bridge', binary)
+        shutil.copy2(os.getenv('DISCOVERY_BRIDGE_TEST_BINARY', str(ROOT / 'dist/discovery-bridge')), binary)
         units = root / 'usr/lib/systemd/system'
         units.mkdir(parents=True)
         for source in (ROOT / 'packaging/systemd').glob('*.service'):
