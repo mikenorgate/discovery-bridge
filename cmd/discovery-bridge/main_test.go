@@ -19,6 +19,8 @@ func TestCLI(t *testing.T) {
 		{"unknown observed type", []string{"registry", "describe", "_private_thing._udp"}, 0, "_private_thing._udp"},
 		{"invalid type", []string{"registry", "describe", "_http._sctp"}, 2, ""},
 		{"missing command", nil, 2, ""},
+		{"publisher missing config", []string{"kubernetes-publisher"}, 2, ""},
+		{"publisher extra argument", []string{"kubernetes-publisher", "--config", "/etc/fixture.json", "extra"}, 2, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer

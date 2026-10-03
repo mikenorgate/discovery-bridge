@@ -20,6 +20,7 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
 	"github.com/mikenorgate/discovery-bridge/internal/publication"
 	"github.com/mikenorgate/discovery-bridge/internal/responder"
+	"github.com/mikenorgate/discovery-bridge/internal/services"
 	"github.com/mikenorgate/discovery-bridge/internal/state"
 	"github.com/mikenorgate/discovery-bridge/internal/translation"
 )
@@ -44,6 +45,7 @@ type collector struct {
 	identities *state.Identities
 	settings   config.Router
 	translator *translation.Sampler
+	services   *services.Receiver
 }
 
 func (c *collector) demand(ctx context.Context, question responder.Question) error {
@@ -305,7 +307,7 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 			if err != nil {
 				return err
 			}
-			groups, err := lanGroups(stop, c.translator.Render(records, now), c.identities, t.links, now)
+			records, groups, err := c.views(stop, records, t.links, now)
 			if err != nil {
 				return err
 			}
@@ -388,6 +390,25 @@ func RunCollector(ctx context.Context, settings config.Router, output io.Writer)
 	defer func() { cancel(nil); servers.Wait() }()
 	if c.translator != nil {
 		servers.Go(func() { c.translator.Run(stop) })
+	}
+	if settings.Publication != nil {
+		scopes, err := settings.Policy()
+		if err != nil {
+			return err
+		}
+		c.services, err = services.NewReceiver(settings.Publication.Source, scopes)
+		if err != nil {
+			return err
+		}
+		listener, err := listen(stop, settings.Publication.Endpoint)
+		if err != nil {
+			return err
+		}
+		clients, err := settings.Publication.Prefixes()
+		if err != nil {
+			return errors.Join(err, listener.Close())
+		}
+		servers.Go(func() { cancel(gateway.Serve(stop, listener, clients, c.services.API())) })
 	}
 	if settings.Gateway != nil {
 		scopes, err := settings.Policy()

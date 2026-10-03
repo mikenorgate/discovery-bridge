@@ -54,18 +54,19 @@ type Bootstrap struct {
 // Router contains operator-owned topology, paths and local producer authority.
 // Translator readiness and Service publication have separate explicit settings.
 type Router struct {
-	Enabled         bool                `json:"enabled"`
-	Interfaces      []LAN               `json:"interfaces"`
-	Sources         map[string][]string `json:"sources"`
-	Forbidden       []string            `json:"forbidden"`
-	AliasPrefix     string              `json:"alias_prefix"`
-	BusSocket       string              `json:"bus_socket"`
-	State           string              `json:"state"`
-	PublisherSocket string              `json:"publisher_socket"`
-	ProducerUser    string              `json:"producer_user"`
-	Gateway         *Listener           `json:"gateway,omitempty"`
-	Bootstrap       []Bootstrap         `json:"bootstrap,omitempty"`
-	Translators     *Translators        `json:"translators,omitempty"`
+	Enabled         bool                 `json:"enabled"`
+	Interfaces      []LAN                `json:"interfaces"`
+	Sources         map[string][]string  `json:"sources"`
+	Forbidden       []string             `json:"forbidden"`
+	AliasPrefix     string               `json:"alias_prefix"`
+	BusSocket       string               `json:"bus_socket"`
+	State           string               `json:"state"`
+	PublisherSocket string               `json:"publisher_socket"`
+	ProducerUser    string               `json:"producer_user"`
+	Gateway         *Listener            `json:"gateway,omitempty"`
+	Bootstrap       []Bootstrap          `json:"bootstrap,omitempty"`
+	Translators     *Translators         `json:"translators,omitempty"`
+	Publication     *PublicationListener `json:"publication,omitempty"`
 }
 
 var (
@@ -116,6 +117,9 @@ func (r Router) Validate() error {
 	}
 	if groups > 12 {
 		return errors.New("router publication group budget exceeded")
+	}
+	if err := r.validatePublication(sources); err != nil {
+		return err
 	}
 	if r.Translators != nil {
 		if err := r.Translators.Validate(); err != nil {

@@ -138,8 +138,12 @@ func RunPublisher(ctx context.Context, settings config.Router) (err error) {
 	}
 	lock = acquired
 	defer func() { _ = listener.Close() }()
+	additional := make(map[string]bool)
+	if settings.Publication != nil {
+		additional[settings.Publication.Source] = true
+	}
 	server := publication.Server{Owner: owner, ProducerUID: uint32(uid), Admission: publication.Admission{
-		Boot: boot, Links: t.links,
+		Boot: boot, Links: t.links, Sources: additional,
 		Owns:     func(name string) (bool, error) { return identities.Owns(stop, name) },
 		OwnsHost: func(source, name string) (bool, error) { return identities.OwnsHost(stop, source, name) },
 	}, Watchdog: func() {

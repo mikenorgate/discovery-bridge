@@ -6,14 +6,16 @@ The adapters retain record expiry, apply address policy and answer opted-in pods
 without forwarding LAN questions into them or advertising individual pods.
 
 The Go port is in progress. The binary provides the router collector and
-independent publisher, node broker, unprivileged responder and registry descriptions.
+independent publisher, node broker, unprivileged responder, Kubernetes Service
+publisher and registry descriptions.
 Tested libraries cover
 leased catalogs, DNS-SD responses, address policy, HTTP feeds, SQLite state and
 interface-scoped Avahi observations with independent wire expiry.
 Router tests use a real Avahi daemon and separate unprivileged processes.
 The collector samples existing TAYGA readiness without allocating mappings.
-Kubernetes Service publication and release packages are still being implemented. The Python
-snapshot provides a behavioral reference with synthetic fixtures.
+Selected ready Services publish only admitted VIPs and external ports.
+Release packages are still being implemented. The Python snapshot provides a
+behavioral reference with synthetic fixtures.
 
 ## Build
 
@@ -44,14 +46,16 @@ and ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/nod
 ./internal/avahi ./internal/observation ./internal/router ./internal/translation` checks pod replies,
 namespace restoration, worker cleanup, D-Bus ownership loss, fragmented IPv4/IPv6
 LAN responses, collector restart, independent publication expiry and translator
-readiness against real TUN interfaces and routes. The translator lab needs
+readiness against real TUN interfaces and routes. The router lab also checks
+Service readiness withdrawal and stopped-producer lease expiry. The translator lab needs
 `/dev/net/tun`; it supplies the systemd response and does not test packet NAT.
 Raw receive copies leave Avahi's UDP port ownership intact. CI also runs these
 checks in a restricted Debian 13 container.
 
 With the reference dependencies installed, run
-`go test -tags reference ./internal/gateway` to check the Go client against the
-Python router's catalog and lookup endpoints.
+`go test -tags reference ./internal/gateway ./internal/state ./internal/publication
+./internal/services` to check HTTP delivery, SQLite ownership and Service DNS
+wire compatibility with the Python reference.
 
 ## Configuration and deployment
 
@@ -85,6 +89,11 @@ profiles. Each profile identifies its interface, service unit, binary, immutable
 configuration, TUN addresses, prefix and data directory. NAT64 additionally
 requires a dynamic pool and `udp-cksum-mode calc` in that configuration.
 See the [translator configuration](docs/TRANSLATORS.md).
+
+An optional `publication` listener accepts leased intents from one admitted
+Kubernetes publisher. Configure its VIP source and client ranges independently
+of the pod gateway. See [Service publication](docs/SERVICES.md) for producer
+configuration, read-only RBAC and readiness rules.
 
 The [MIT license](LICENSE) covers project source. Pinned third-party registry
 data retain their [upstream notices](registry/COPYING.avahi).

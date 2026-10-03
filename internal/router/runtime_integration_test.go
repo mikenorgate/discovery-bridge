@@ -26,10 +26,41 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/gateway"
 	"github.com/mikenorgate/discovery-bridge/internal/linuxnet"
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
+	"github.com/mikenorgate/discovery-bridge/internal/services"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
 )
+
+// The compiled producer consumes CLI JSON exactly as on deployment. The fixture
+// substitutes API data without a cluster or infrastructure credentials.
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "kubectl" {
+		for _, arg := range os.Args[2:] {
+			if arg == "config" {
+				_, _ = os.Stdout.WriteString(`{"clusters":[{"cluster":{"server":"https://fixture"}}]}`)
+				os.Exit(0)
+			}
+		}
+		data, err := os.ReadFile(os.Getenv("DISCOVERY_KUBERNETES_TEST_SOURCE"))
+		if err != nil {
+			panic(err)
+		}
+		var source map[string]json.RawMessage
+		if err := json.Unmarshal(data, &source); err != nil {
+			panic(err)
+		}
+		key := "service"
+		if strings.Contains(os.Args[len(os.Args)-1], "endpointslices?") {
+			key = "slices"
+		}
+		if _, err := os.Stdout.Write(source[key]); err != nil {
+			panic(err)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 // Each role runs in a separate process under its own unprivileged UID. The
 // enclosing lab has private mount and network namespaces, including /run.
@@ -42,12 +73,22 @@ func TestRouterRoleProcess(t *testing.T) {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+	defer cancel()
+	if role == "kubernetes-publisher" {
+		settings, err := config.LoadServicePublisher(os.Getenv("DISCOVERY_BRIDGE_TEST_CONFIG"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := services.RunPublisher(ctx, settings, os.Stdout); err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+		return
+	}
 	settings, err := config.LoadRouter(os.Getenv("DISCOVERY_BRIDGE_TEST_CONFIG"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM)
-	defer cancel()
 	if role == "publisher" {
 		err = RunPublisher(ctx, settings)
 	} else {
@@ -121,10 +162,12 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		command := exec.CommandContext(ctx, "unshare", "--mount", "--net", "--propagation", "private", self, "-test.run=^TestRouterRuntimeWithRealAvahi$", "-test.timeout=45s", "-test.v")
-		command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_LAB=1")
+		command := exec.CommandContext(ctx, "unshare", "--mount", "--net", "--propagation", "private", self, "-test.run=^TestRouterRuntimeWithRealAvahi$", "-test.timeout=75s", "-test.v")
+		// All roles share this fixture's task budget. Match the two runtime
+		// processors used under each deployed role's fractional CPU limit.
+		command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_LAB=1", "GOMAXPROCS=2")
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("isolated router lab: %v\n%s", err, output)
 		}
@@ -144,7 +187,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 	if err := os.Chmod(dir, 0770); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 105*time.Second)
 	t.Cleanup(cancel)
 	// A copy is needed because native go test build directories are root-only.
 	self, err := os.Executable()
@@ -175,7 +218,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 	var peers []*linuxnet.Namespace
 	var peerInterfaces []linuxnet.Interface
 	for i := range 2 {
-		child := launch(t, exec.CommandContext(ctx, "unshare", "--net", "sleep", "80"), filepath.Join(dir, "peer-"+strconv.Itoa(i)+".log"))
+		child := launch(t, exec.CommandContext(ctx, "unshare", "--net", "sleep", "110"), filepath.Join(dir, "peer-"+strconv.Itoa(i)+".log"))
 		var ns *linuxnet.Namespace
 		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
 			ns, err = linuxnet.Open("/proc", child.command.Process.Pid)
@@ -269,6 +312,8 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	settings := config.Router{Enabled: true, Interfaces: []config.LAN{{Interface: "lan0", Source: "lan-a", Families: []int{4, 6}}, {Interface: "lan1", Source: "lan-b", Families: []int{4, 6}}}, Sources: map[string][]string{"lan-a": {"192.0.2.0/24", "2001:db8:1::/64"}, "lan-b": {"198.51.100.0/24", "2001:db8:2::/64"}}, AliasPrefix: "bridge", BusSocket: bus, State: filepath.Join(dir, "identities.db"), PublisherSocket: filepath.Join(dir, "publisher.sock"), ProducerUser: "nobody", Gateway: &config.Listener{Endpoint: config.Endpoint{Host: "127.0.0.1", Port: 19443}, Clients: []string{"127.0.0.1/32"}}}
+	settings.Sources["kubernetes"] = []string{"2001:db8:ff00::/60"}
+	settings.Publication = &config.PublicationListener{Listener: config.Listener{Endpoint: config.Endpoint{Host: "127.0.0.1", Port: 19444}, Clients: []string{"127.0.0.1/32"}}, Source: "kubernetes"}
 	write(settings.State, nil, 0660)
 	if err := os.Chmod(settings.State, 0660); err != nil {
 		t.Fatal(err)
@@ -282,10 +327,40 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(configPath, configData, 0644)
+	producerConfig := filepath.Join(dir, "services.json")
+	producerSource := filepath.Join(dir, "api.json")
+	selected := config.Service{Namespace: "services", Name: "example", Port: "http", Type: "_http._tcp", Instance: "Example web", TXT: map[string]string{"path": "/"}, Subtypes: []string{"test"}}
+	producerSettings := config.ServicePublisher{Enabled: true, Kubectl: []string{binary, "kubectl"}, Kubeconfig: "/etc/fixture-kubeconfig", Gateway: settings.Publication.Endpoint, VIPNetworks: settings.Sources["kubernetes"], Services: []config.Service{selected}}
+	data, err := json.Marshal(producerSettings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(producerConfig, data, 0644)
+	apiSource := func(ready bool) {
+		t.Helper()
+		service := json.RawMessage(`{"apiVersion":"v1","kind":"Service","metadata":{"namespace":"services","name":"example","uid":"service-uid","resourceVersion":"10"},"spec":{"type":"LoadBalancer","ports":[{"name":"http","protocol":"TCP","port":80,"targetPort":3000}],"clusterIP":"2001:db8:e000::10"},"status":{"loadBalancer":{"ingress":[{"ip":"2001:db8:ff00::22"}]}}}`)
+		slices := json.RawMessage(`{"apiVersion":"discovery.k8s.io/v1","kind":"EndpointSliceList","items":[{"metadata":{"namespace":"services","labels":{"kubernetes.io/service-name":"example"},"ownerReferences":[{"kind":"Service","uid":"service-uid","controller":true}]},"addressType":"IPv6","ports":[{"name":"http","protocol":"TCP","port":3000}],"endpoints":[{"addresses":["2001:db8:f004::123"],"conditions":{"ready":` + strconv.FormatBool(ready) + `}}]}]}`)
+		data, err := json.Marshal(map[string]json.RawMessage{"service": service, "slices": slices})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Atomic replacement prevents the fixture from manufacturing partial API
+		// responses while the compiled producer reads the file.
+		write(producerSource+".new", data, 0644)
+		if err := os.Rename(producerSource+".new", producerSource); err != nil {
+			t.Fatal(err)
+		}
+	}
+	apiSource(true)
 	role := func(name string, uid uint32) *labProcess {
 		command := exec.CommandContext(ctx, binary, "-test.run=^TestRouterRoleProcess$", "-test.v")
-		command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_ROLE="+name, "DISCOVERY_BRIDGE_TEST_CONFIG="+configPath)
-		command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: 65534}, AmbientCaps: []uintptr{unix.CAP_NET_RAW}}
+		path := configPath
+		caps := []uintptr{unix.CAP_NET_RAW}
+		if name == "kubernetes-publisher" {
+			path, caps = producerConfig, nil
+		}
+		command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_ROLE="+name, "DISCOVERY_BRIDGE_TEST_CONFIG="+path, "DISCOVERY_KUBERNETES_TEST_SOURCE="+producerSource, "GORACE=atexit_sleep_ms=0")
+		command.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: 65534, Groups: []uint32{}}, AmbientCaps: caps}
 		return launch(t, command, filepath.Join(dir, name+".log"))
 	}
 	for _, lan := range []string{"lan0", "lan1"} {
@@ -302,7 +377,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 	publisher := role("publisher", 1) // The fixture's daemon account exists in NSS.
 	t.Cleanup(func() {
 		if t.Failed() {
-			for _, name := range []string{"bus.log", "avahi.log", "publisher.log", "collector.log"} {
+			for _, name := range []string{"bus.log", "avahi.log", "publisher.log", "collector.log", "kubernetes-publisher.log"} {
 				if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
 					t.Logf("%s:\n%s", name, data)
 				}
@@ -420,7 +495,67 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			t.Fatal("application hostname renamed", record)
 		}
 	}
-	for _, process := range []*labProcess{publisher, collector} {
+	serviceProducer := role("kubernetes-publisher", 65534)
+	serviceCount := func() int {
+		t.Helper()
+		if err := json.Unmarshal(read(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for _, record := range payload.Snapshot.Records {
+			if record.Source != "kubernetes" {
+				continue
+			}
+			count++
+			if record.Data == "2001:db8:f004::123" || record.Data == "2001:db8:e000::10" {
+				t.Fatal("backend appeared in pod discovery", record)
+			}
+			if record.Type == "SRV" && !strings.HasPrefix(record.Data, "0 0 80 kube-") {
+				t.Fatal("Service target port or non-VIP target published", record)
+			}
+		}
+		return count
+	}
+	waitServices := func(expected int, timeout time.Duration) {
+		t.Helper()
+		for deadline := time.Now().Add(timeout); ; {
+			send()
+			collector.check(t)
+			publisher.check(t)
+			// Shared enumeration RRsets carry the shortest member TTL. Allow
+			// the next collector tick to restore the surviving native member.
+			if serviceCount() == expected && (expected != 0 || len(payload.Snapshot.Records) == 6) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("Service discovery did not reach expected count", expected, payload)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	waitServices(6, 7*time.Second)
+	for _, receiver := range receivers {
+		if err := receiver.Socket.SetReadDeadline(time.Now().Add(4 * time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for !found {
+			packet, err := receiver.Receive()
+			if err != nil {
+				t.Fatal("Service LAN publication missing", err)
+			}
+			var response dns.Msg
+			if err := response.Unpack(packet.Wire); err != nil {
+				t.Fatal(err)
+			}
+			for _, rr := range response.Answer {
+				if srv, ok := rr.(*dns.SRV); ok && srv.Port == 80 && srv.Hdr.Ttl == 1 && srv.Hdr.Class&0x8000 != 0 {
+					found = true
+				}
+			}
+		}
+	}
+	for _, process := range []*labProcess{publisher, collector, serviceProducer} {
 		data, err := os.ReadFile("/proc/" + strconv.Itoa(process.command.Process.Pid) + "/status")
 		if err != nil {
 			t.Fatal(err)
@@ -432,7 +567,11 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 				fields[key] = strings.TrimSpace(value)
 			}
 		}
-		if fields["CapEff"] != "0000000000002000" || fields["CapPrm"] != "0000000000002000" || fields["NoNewPrivs"] != "1" || fields["Groups"] != "" {
+		caps := "0000000000002000"
+		if process == serviceProducer {
+			caps = "0000000000000000"
+		}
+		if fields["CapEff"] != caps || fields["CapPrm"] != caps || fields["NoNewPrivs"] != "1" || fields["Groups"] != "" {
 			t.Fatal("router process gained unnecessary permissions", fields["CapEff"], fields["CapPrm"], fields["NoNewPrivs"], fields["Groups"])
 		}
 		threads, err := strconv.Atoi(fields["Threads"])
@@ -447,6 +586,52 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		if err != nil || rss > 128*1024 {
 			t.Fatal("router fixture exceeded its memory budget", rss, err)
 		}
+	}
+	// Readiness loss becomes an empty full replacement and emits goodbyes without
+	// withdrawing the continuously refreshed native device graph.
+	apiSource(false)
+	waitServices(0, 7*time.Second)
+	for _, receiver := range receivers {
+		if err := receiver.Socket.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for !found {
+			packet, err := receiver.Receive()
+			if err != nil {
+				t.Fatal("Service goodbye missing", err)
+			}
+			var response dns.Msg
+			if err := response.Unpack(packet.Wire); err != nil {
+				t.Fatal(err)
+			}
+			for _, rr := range response.Answer {
+				if srv, ok := rr.(*dns.SRV); ok && srv.Port == 80 && srv.Hdr.Ttl == 0 {
+					found = true
+				}
+			}
+		}
+	}
+	apiSource(true)
+	waitServices(6, 7*time.Second)
+	if err := serviceProducer.command.Process.Signal(syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	waitServices(0, 17*time.Second)
+	if len(payload.Snapshot.Records) != 6 {
+		t.Fatal("expired Service intent disturbed native device discovery", payload.Snapshot.Records)
+	}
+	if err := serviceProducer.command.Process.Signal(syscall.SIGCONT); err != nil {
+		t.Fatal(err)
+	}
+	waitServices(6, 7*time.Second)
+	apiSource(false)
+	waitServices(0, 7*time.Second)
+	if err := serviceProducer.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if serviceProducer.err != nil {
+		t.Fatal("Service producer did not stop cleanly", serviceProducer.err)
 	}
 	for i, receiver := range receivers {
 		found := false

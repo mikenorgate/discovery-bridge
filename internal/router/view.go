@@ -2,16 +2,55 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/avahi"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
+	"github.com/mikenorgate/discovery-bridge/internal/publication"
 	"github.com/mikenorgate/discovery-bridge/internal/state"
 )
+
+var errLANBudget = errors.New("LAN alias publication budget exceeded")
+
+// views admits optional Services only when both deliveries fit their existing
+// limits. A large optional snapshot cannot interrupt native device discovery.
+func (c *collector) views(ctx context.Context, native []catalog.Record, links map[int]observation.Link, now catalog.Moment) ([]catalog.Record, []avahi.Intent, error) {
+	records := native
+	if optional := c.services.Records(now); len(optional) > 0 && len(native)+len(optional) <= catalog.MaxRecords {
+		records = append(slices.Clone(native), optional...)
+	}
+	for {
+		rendered := c.translator.Render(records, now)
+		groups, err := lanGroups(ctx, rendered, c.identities, links, now)
+		optional := len(records) > len(native)
+		if optional && err == nil {
+			// Reserve the largest revision field and a full generation ID.
+			// Rendered addresses retain their native identity and short expiry.
+			value := catalog.Snapshot{Schema: 2, Epoch: strings.Repeat("0", 32), Revision: math.MaxInt64, Issued: now.Wall, Until: now.Wall.Add(catalog.Lease), Records: rendered}
+			data, encodeErr := json.Marshal(value)
+			if encodeErr != nil {
+				return nil, nil, encodeErr
+			}
+			if len(rendered) > catalog.MaxRecords || len(data) > catalog.MaxBytes {
+				err = errLANBudget
+			} else if _, frameErr := publication.Frame(strings.Repeat("0", 36), math.MaxInt64, now.Mono, groups); frameErr != nil {
+				err = errLANBudget
+			}
+		}
+		if optional && errors.Is(err, errLANBudget) {
+			records = native
+			continue
+		}
+		return records, groups, err
+	}
+}
 
 // podView preserves coherent original names as shared answers. The bridge has
 // not probed ownership inside the pod and never advertises the pod itself.
@@ -70,7 +109,7 @@ func lanGroups(ctx context.Context, records []catalog.Record, identities *state.
 		base += len(aliases) * len(link.Families)
 	}
 	if base > catalog.MaxRecords {
-		return nil, errors.New("LAN alias publication budget exceeded")
+		return nil, errLANBudget
 	}
 	var intents []avahi.Intent
 	for index, link := range links {

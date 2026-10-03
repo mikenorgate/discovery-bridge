@@ -83,7 +83,7 @@ jobs:
           python3 -m pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt
           make reference
           python3 tests/reference_views.py --check
-          go test -race -tags reference -count=1 ./internal/gateway ./internal/state ./internal/publication
+          go test -race -tags reference -count=1 ./internal/gateway ./internal/state ./internal/publication ./internal/services
 
   lint:
     name: Lint and vulnerabilities

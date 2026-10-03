@@ -17,12 +17,18 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/node"
 	"github.com/mikenorgate/discovery-bridge/internal/registry"
 	"github.com/mikenorgate/discovery-bridge/internal/router"
+	"github.com/mikenorgate/discovery-bridge/internal/services"
 	registrydata "github.com/mikenorgate/discovery-bridge/registry"
 )
 
 var version = "development"
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "kubernetes-publisher" {
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+		return runServices(ctx, args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && (args[0] == "collector" || args[0] == "publisher") {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
@@ -40,7 +46,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) < 2 || args[0] != "registry" || args[1] != "describe" {
-		if _, err := fmt.Fprintln(stderr, "usage: discovery-bridge version | registry describe [--locale language] _service._tcp | broker --config path [--node name] | collector --config path | publisher --config path"); err != nil {
+		if _, err := fmt.Fprintln(stderr, "usage: discovery-bridge version | registry describe [--locale language] _service._tcp | broker --config path [--node name] | collector --config path | publisher --config path | kubernetes-publisher --config path"); err != nil {
 			return 1
 		}
 		return 2
@@ -72,6 +78,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runServices(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("kubernetes-publisher", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	path := flags.String("config", "", "absolute Service publisher configuration path")
+	if flags.Parse(args) != nil || flags.NArg() != 0 || *path == "" {
+		return 2
+	}
+	settings, err := config.LoadServicePublisher(*path)
+	if err == nil {
+		err = services.RunPublisher(ctx, settings, stdout)
+	}
+	if err == nil || errors.Is(err, context.Canceled) {
+		return 0
+	}
+	if _, err := fmt.Fprintln(stderr, "Service publisher stopped:", err); err != nil {
+		return 1
+	}
+	return 1
 }
 
 func runRouter(ctx context.Context, args []string, stdout, stderr io.Writer) int {
