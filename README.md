@@ -81,7 +81,8 @@ Configure LAN interfaces and families, admitted source ranges, an alias prefix,
 the local D-Bus socket, identity database, publisher socket and collector account.
 An optional gateway listener requires a numeric bind address and explicit client
 ranges. Provision the identity database and its WAL files with group write access
-for both accounts. Packaging will provide the account and file setup.
+for both accounts. [Router support files](packaging/README.md) define the units,
+accounts, D-Bus permissions and file setup; package assembly remains in progress.
 
 An optional `translators` object enables read-only TAYGA sampling. Supply explicit
 translation ranges, `ip` and `systemctl` commands, and either or both instance

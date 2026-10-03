@@ -89,6 +89,28 @@ func TestRouterRoleProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connection, err := dbus.Connect("unix:path=" + settings.BusSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = connection.Close() }()
+	for _, member := range []string{"SetHostName", "EntryGroupNew"} {
+		if member == "EntryGroupNew" && role == "publisher" {
+			continue
+		}
+		var args []any
+		if member == "SetHostName" {
+			args = []any{"forbidden"}
+		}
+		call := connection.Object("org.freedesktop.Avahi", "/").CallWithContext(ctx, "org.freedesktop.Avahi.Server."+member, 0, args...)
+		var denied dbus.Error
+		if !errors.As(call.Err, &denied) || denied.Name != "org.freedesktop.DBus.Error.AccessDenied" {
+			t.Fatal("router account gained an unnecessary Avahi method", role, member, call.Err)
+		}
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if role == "publisher" {
 		err = RunPublisher(ctx, settings)
 	} else {
@@ -281,7 +303,19 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(busConfig, []byte(`<busconfig><type>system</type><listen>unix:path=`+bus+`</listen><auth>EXTERNAL</auth><policy context="default"><allow user="*"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>`), 0644)
+	policyPath := os.Getenv("DISCOVERY_BRIDGE_TEST_DBUS_POLICY")
+	if policyPath == "" {
+		policyPath = "../../packaging/dbus/org.discovery-bridge.conf"
+	}
+	policyData, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Use existing test-image accounts; production sysusers create distinct IDs.
+	policyData = []byte(strings.NewReplacer("discovery-bridge-collector", "nobody", "discovery-bridge-publisher", "daemon").Replace(string(policyData)))
+	policyFile := filepath.Join(dir, "policy.conf")
+	write(policyFile, policyData, 0644)
+	write(busConfig, []byte(`<busconfig><type>system</type><listen>unix:path=`+bus+`</listen><auth>EXTERNAL</auth><policy context="default"><allow user="*"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy><include>`+policyFile+`</include></busconfig>`), 0644)
 	busProcess := launch(t, exec.CommandContext(ctx, "dbus-daemon", "--nofork", "--nopidfile", "--config-file="+busConfig), filepath.Join(dir, "bus.log"))
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
 		busProcess.check(t)

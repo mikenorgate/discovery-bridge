@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "interfaces": [{"interface": "lan0", "source": "lan-a", "families": [4, 6]}],
+  "sources": {"lan-a": ["192.0.2.0/24", "2001:db8:1::/64"]},
+  "forbidden": [],
+  "alias_prefix": "bridge",
+  "bus_socket": "/run/dbus/system_bus_socket",
+  "state": "/var/lib/discovery-bridge/identities.db",
+  "publisher_socket": "/run/discovery-bridge/publisher.sock",
+  "producer_user": "discovery-bridge-collector"
+}
