@@ -6,66 +6,31 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
-	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
+	"github.com/mikenorgate/discovery-bridge/internal/command"
 	"github.com/mikenorgate/discovery-bridge/internal/config"
 	"github.com/mikenorgate/discovery-bridge/internal/jsonwire"
-	"golang.org/x/sys/unix"
 )
 
 // ReadJSON is an injectable read-only CLI adapter used by brokers and publishers.
 type ReadJSON func(context.Context, []string) (json.RawMessage, error)
 
-type boundedOutput struct {
-	data   []byte
-	cancel context.CancelFunc
-}
-
-func (b *boundedOutput) Write(data []byte) (int, error) {
-	if len(b.data)+len(data) > 4_194_304 {
-		b.cancel()
-		return 0, errors.New("command output limit")
-	}
-	b.data = append(b.data, data...)
-	return len(data), nil
-}
-
 // CommandJSON bounds command lifetime, output and descendants without a shell.
 func CommandJSON(ctx context.Context, argv []string) (json.RawMessage, error) {
-	if len(argv) < 1 || !strings.HasPrefix(argv[0], "/") {
-		return nil, errors.New("absolute command required")
-	}
-	commandCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	command := exec.CommandContext(commandCtx, argv[0], argv[1:]...)
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	command.WaitDelay = 300 * time.Millisecond
-	command.Cancel = func() error {
-		err := unix.Kill(-command.Process.Pid, unix.SIGKILL)
-		if errors.Is(err, unix.ESRCH) {
-			return nil
-		}
-		return err
-	}
-	output := &boundedOutput{cancel: cancel}
-	command.Stdout = output
-	if err := command.Run(); err != nil {
-		if command.Process != nil {
-			_ = unix.Kill(-command.Process.Pid, unix.SIGKILL)
-		}
-		return nil, errors.New("read-only command unavailable")
+	data, err := command.Run(ctx, argv, 3*time.Second, 4_194_304)
+	if err != nil {
+		return nil, err
 	}
 	var value map[string]json.RawMessage
-	if err := jsonwire.Decode(output.data, 4_194_304, &value); err != nil {
+	if err := jsonwire.Decode(data, 4_194_304, &value); err != nil {
 		return nil, errors.New("invalid command JSON")
 	}
-	return json.RawMessage(output.data), nil
+	return json.RawMessage(data), nil
 }
 
 type metadata struct {

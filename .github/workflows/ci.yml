@@ -52,13 +52,14 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install --yes iproute2 util-linux dbus avahi-daemon ethtool
-          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet ./internal/node ./internal/avahi ./internal/observation ./internal/router
+          sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet ./internal/node ./internal/avahi ./internal/observation ./internal/router ./internal/translation
       - name: Restricted container integration
         run: |
           docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
-          for package in linuxnet node avahi observation publication router; do
+          for package in linuxnet node avahi observation publication router translation; do
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
             capabilities=()
+            if [ "$package" = translation ]; then capabilities+=(--device /dev/net/tun); fi
             if [ "$package" = observation ] || [ "$package" = router ]; then capabilities+=(--cap-add NET_RAW); fi
             if [ "$package" = router ]; then
               # Fixture-only permissions for Avahi's runtime directory and

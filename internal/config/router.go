@@ -65,6 +65,7 @@ type Router struct {
 	ProducerUser    string              `json:"producer_user"`
 	Gateway         *Listener           `json:"gateway,omitempty"`
 	Bootstrap       []Bootstrap         `json:"bootstrap,omitempty"`
+	Translators     *Translators        `json:"translators,omitempty"`
 }
 
 var (
@@ -74,7 +75,22 @@ var (
 )
 
 // Policy validates the explicit native source and excluded network policy.
-func (r Router) Policy() (*policy.SourcePolicy, error) { return policy.New(r.Sources, r.Forbidden) }
+func (r Router) Policy() (*policy.SourcePolicy, error) {
+	forbidden := slices.Clone(r.Forbidden)
+	if r.Translators != nil {
+		if err := r.Translators.Validate(); err != nil {
+			return nil, err
+		}
+		forbidden = append(forbidden, r.Translators.NAT64Prefix, r.Translators.NAT46Pool)
+		if r.Translators.NAT46 != nil {
+			forbidden = append(forbidden, r.Translators.NAT46.Prefix)
+		}
+		if r.Translators.NAT64 != nil {
+			forbidden = append(forbidden, r.Translators.NAT64.DynamicPool)
+		}
+	}
+	return policy.New(r.Sources, forbidden)
+}
 
 // Validate rejects implicit topology, paths, publication authority or listeners.
 func (r Router) Validate() error {
@@ -100,6 +116,16 @@ func (r Router) Validate() error {
 	}
 	if groups > 12 {
 		return errors.New("router publication group budget exceeded")
+	}
+	if r.Translators != nil {
+		if err := r.Translators.Validate(); err != nil {
+			return err
+		}
+		for _, profile := range []*Translator{r.Translators.NAT46, r.Translators.NAT64} {
+			if profile != nil && interfaces[profile.Interface] {
+				return errors.New("translator TUN cannot be a discovery LAN")
+			}
+		}
 	}
 	for source := range r.Sources {
 		if !sourceName.MatchString(source) {

@@ -21,6 +21,7 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/publication"
 	"github.com/mikenorgate/discovery-bridge/internal/responder"
 	"github.com/mikenorgate/discovery-bridge/internal/state"
+	"github.com/mikenorgate/discovery-bridge/internal/translation"
 )
 
 type demand struct {
@@ -42,6 +43,7 @@ type collector struct {
 	feed       *gateway.Feed
 	identities *state.Identities
 	settings   config.Router
+	translator *translation.Sampler
 }
 
 func (c *collector) demand(ctx context.Context, question responder.Question) error {
@@ -101,6 +103,8 @@ func (c *collector) browseDemand(ctx context.Context, b *avahi.Browser, t *topol
 	kinds := []uint16{question.Type}
 	if question.Type == dns.TypeANY {
 		kinds = []uint16{dns.TypeA, dns.TypeAAAA, dns.TypePTR, dns.TypeSRV, dns.TypeTXT}
+	} else if c.translator != nil && (question.Type == dns.TypeA || question.Type == dns.TypeAAAA) {
+		kinds = []uint16{dns.TypeA, dns.TypeAAAA}
 	}
 	for index, link := range t.links {
 		if source != "" && source != link.Source {
@@ -301,7 +305,7 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 			if err != nil {
 				return err
 			}
-			groups, err := lanGroups(stop, records, c.identities, t.links, now)
+			groups, err := lanGroups(stop, c.translator.Render(records, now), c.identities, t.links, now)
 			if err != nil {
 				return err
 			}
@@ -374,10 +378,17 @@ func RunCollector(ctx context.Context, settings config.Router, output io.Writer)
 	}
 	defer func() { err = errors.Join(err, identities.Close()) }()
 	c := &collector{identities: identities, settings: settings}
+	c.translator, err = translation.New(settings.Translators, settings.Interfaces)
+	if err != nil {
+		return err
+	}
 	stop, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	var servers sync.WaitGroup
 	defer func() { cancel(nil); servers.Wait() }()
+	if c.translator != nil {
+		servers.Go(func() { c.translator.Run(stop) })
+	}
 	if settings.Gateway != nil {
 		scopes, err := settings.Policy()
 		if err != nil {
@@ -388,6 +399,9 @@ func RunCollector(ctx context.Context, settings config.Router, output io.Writer)
 			return err
 		}
 		defer func() { err = errors.Join(err, c.feed.Close()) }()
+		if c.translator != nil {
+			c.feed.Render = c.translator.Render
+		}
 		lookups := gateway.NewLookups(c.demand)
 		defer lookups.Close()
 		listener, err := listen(stop, settings.Gateway.Endpoint)

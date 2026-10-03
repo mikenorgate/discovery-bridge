@@ -11,8 +11,8 @@ Tested libraries cover
 leased catalogs, DNS-SD responses, address policy, HTTP feeds, SQLite state and
 interface-scoped Avahi observations with independent wire expiry.
 Router tests use a real Avahi daemon and separate unprivileged processes.
-Translator readiness, Kubernetes Service publication and release packages are
-still being implemented. The Python
+The collector samples existing TAYGA readiness without allocating mappings.
+Kubernetes Service publication and release packages are still being implemented. The Python
 snapshot provides a behavioral reference with synthetic fixtures.
 
 ## Build
@@ -41,9 +41,11 @@ PYTHONDONTWRITEBYTECODE=1 ../../.venv/bin/python -m unittest discover -s tests -
 Linux namespace integration tests require root and an isolated test environment
 with `iproute2`, `util-linux`, `dbus`, `avahi-daemon` and `ethtool`. CI runs them on disposable native AMD64
 and ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/node
-./internal/avahi ./internal/observation ./internal/router` checks pod replies,
+./internal/avahi ./internal/observation ./internal/router ./internal/translation` checks pod replies,
 namespace restoration, worker cleanup, D-Bus ownership loss, fragmented IPv4/IPv6
-LAN responses, collector restart and independent publication expiry.
+LAN responses, collector restart, independent publication expiry and translator
+readiness against real TUN interfaces and routes. The translator lab needs
+`/dev/net/tun`; it supplies the systemd response and does not test packet NAT.
 Raw receive copies leave Avahi's UDP port ownership intact. CI also runs these
 checks in a restricted Debian 13 container.
 
@@ -76,6 +78,13 @@ the local D-Bus socket, identity database, publisher socket and collector accoun
 An optional gateway listener requires a numeric bind address and explicit client
 ranges. Provision the identity database and its WAL files with group write access
 for both accounts. Packaging will provide the account and file setup.
+
+An optional `translators` object enables read-only TAYGA sampling. Supply explicit
+translation ranges, `ip` and `systemctl` commands, and either or both instance
+profiles. Each profile identifies its interface, service unit, binary, immutable
+configuration, TUN addresses, prefix and data directory. NAT64 additionally
+requires a dynamic pool and `udp-cksum-mode calc` in that configuration.
+See the [translator configuration](docs/TRANSLATORS.md).
 
 The [MIT license](LICENSE) covers project source. Pinned third-party registry
 data retain their [upstream notices](registry/COPYING.avahi).
