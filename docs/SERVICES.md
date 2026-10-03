@@ -87,7 +87,7 @@ device records. An IPv4 answer for an IPv6 VIP requires an existing ready NAT46
 mapping. Discovery never creates one. Mapping expiry removes the derived
 address; Service expiry removes the complete Service graph.
 
-CI checks both producer/receiver directions against the Python reference,
+CI checks producer intents and receiver records against fixed contract fixtures,
 including DNS wire names and opaque TXT data. The real Avahi fixture exercises
 the compiled producer with synthetic API responses, cross-LAN IPv4/IPv6
 publication, readiness goodbyes, stopped-producer expiry and recovery. It does

@@ -7,7 +7,7 @@ import (
 	"unicode/utf16"
 )
 
-// Encode retains Python's ASCII JSON string encoding for persistent identity hashes.
+// Encode retains the ASCII JSON string encoding used by persistent identity hashes.
 func Encode(value any) ([]byte, error) {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)

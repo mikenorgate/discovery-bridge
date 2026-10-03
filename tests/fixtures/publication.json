@@ -1,0 +1,54 @@
+{
+  "frame": "{\"boot\":\"fixture-boot\",\"sequence\":1,\"issued\":0,\"groups\":[{\"interface\":2,\"family\":4,\"deadline\":20,\"records\":[{\"name\":\"db-05ca1ae33ae11432717e.local.\",\"type\":1,\"data\":\"192.0.2.42\",\"source\":\"lan-a\",\"unique\":true},{\"name\":\"db-05ca1ae33ae11432717e.local.\",\"type\":28,\"data\":\"2001:db8:1::42\",\"source\":\"lan-a\",\"unique\":true},{\"name\":\"Alias-9f3f8d2e02939926db18._example._tcp.local.\",\"type\":33,\"data\":\"0 0 1234 db-05ca1ae33ae11432717e.local.\",\"source\":\"lan-a\",\"unique\":true},{\"name\":\"Alias-9f3f8d2e02939926db18._example._tcp.local.\",\"type\":16,\"data\":\"\\\"binary=\\\\000\\\\255\\\" \\\"\\\"\",\"source\":\"lan-a\",\"unique\":true},{\"name\":\"_example._tcp.local.\",\"type\":12,\"data\":\"Alias-9f3f8d2e02939926db18._example._tcp.local.\",\"source\":\"lan-a\",\"unique\":false},{\"name\":\"_services._dns-sd._udp.local.\",\"type\":12,\"data\":\"_example._tcp.local.\",\"source\":\"lan-a\",\"unique\":false}]}]}\n",
+  "records": [
+    [
+      "085f6578616d706c65045f746370056c6f63616c00",
+      12,
+      "1a616c6961732d3966336638643265303239333939323664623138085f6578616d706c65045f746370056c6f63616c00",
+      "lan-a",
+      false,
+      1
+    ],
+    [
+      "095f7365727669636573075f646e732d7364045f756470056c6f63616c00",
+      12,
+      "085f6578616d706c65045f746370056c6f63616c00",
+      "lan-a",
+      false,
+      1
+    ],
+    [
+      "1764622d3035636131616533336165313134333237313765056c6f63616c00",
+      1,
+      "c000022a",
+      "lan-a",
+      true,
+      1
+    ],
+    [
+      "1764622d3035636131616533336165313134333237313765056c6f63616c00",
+      28,
+      "20010db8000100000000000000000042",
+      "lan-a",
+      true,
+      1
+    ],
+    [
+      "1a616c6961732d3966336638643265303239333939323664623138085f6578616d706c65045f746370056c6f63616c00",
+      16,
+      "0962696e6172793d00ff00",
+      "lan-a",
+      true,
+      1
+    ],
+    [
+      "1a616c6961732d3966336638643265303239333939323664623138085f6578616d706c65045f746370056c6f63616c00",
+      33,
+      "0000000004d21764622d3035636131616533336165313134333237313765056c6f63616c00",
+      "lan-a",
+      true,
+      1
+    ]
+  ],
+  "sequence": 1
+}

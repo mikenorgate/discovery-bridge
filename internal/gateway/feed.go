@@ -50,7 +50,7 @@ func NewFeed(ctx context.Context, source *policy.SourcePolicy, path string) (*Fe
 	return &Feed{policy: source, source: catalog.New(source, nil), generation: g, epoch: hex.EncodeToString(epoch[:]), authority: catalog.Authority{}}, nil
 }
 
-// Export preserves stable Python record hashes and the sampled absolute expiry.
+// Export preserves stable record hashes and the sampled absolute expiry.
 func Export(answers []catalog.Answer, observed time.Time) ([]catalog.Record, []catalog.RRSet, error) {
 	records := make([]catalog.Record, 0, len(answers))
 	sets := make(map[catalog.RRSet]bool)

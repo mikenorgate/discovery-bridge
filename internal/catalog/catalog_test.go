@@ -29,7 +29,7 @@ func sourcePolicy(t *testing.T) *policy.SourcePolicy {
 	return p
 }
 
-func TestPythonReferenceViews(t *testing.T) {
+func TestFixtureViews(t *testing.T) {
 	data, err := os.ReadFile("../../tests/fixtures/views.json")
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestPythonReferenceViews(t *testing.T) {
 				actual = append(actual, expectedAnswer{hex.EncodeToString([]byte(a.Key())), a.RR.Header().Ttl, a.Source, a.Unique})
 			}
 			if !reflect.DeepEqual(actual, f.Expected) {
-				t.Fatalf("Go view differs from Python\nGo: %#v\nPython: %#v", actual, f.Expected)
+				t.Fatalf("Response view differs from fixture\nGo: %#v\nExpected: %#v", actual, f.Expected)
 			}
 		})
 	}

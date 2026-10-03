@@ -1,2 +1,0 @@
--r requirements-avahi.txt
--r requirements-gateway.txt

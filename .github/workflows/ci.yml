@@ -43,12 +43,9 @@ jobs:
         with:
           go-version: '1.27.1'
           check-latest: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.14'
       - name: Verify public source and module inputs
         run: |
-          python3 tests/check_public.py
+          go run ./cmd/release-tools check-source
           go mod verify
           test -z "$(gofmt -l cmd internal registry)"
           go mod tidy
@@ -71,8 +68,8 @@ jobs:
             --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
             --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
-            discovery-bridge-integration python3 tests/check_debian_install.py \
-            dist/releases/${{ matrix.arch }}/discovery-bridge_${RELEASE_VERSION}_${{ matrix.arch }}.deb
+            discovery-bridge-integration dist/release-tools check-install --root /source \
+            --artifact dist/releases/${{ matrix.arch }}/discovery-bridge_${RELEASE_VERSION}_${{ matrix.arch }}.deb
           docker build --tag discovery-bridge-package --file tests/Containerfile.package \
             --build-arg PACKAGE=discovery-bridge_${RELEASE_VERSION}_${{ matrix.arch }}.deb \
             dist/releases/${{ matrix.arch }}
@@ -82,7 +79,7 @@ jobs:
             --security-opt no-new-privileges \
             --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
-            discovery-bridge-package python3 tests/check_router_support.py
+            discovery-bridge-package dist/release-tools check-support --root /source
           for package in linuxnet node avahi observation publication router translation; do
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/$package.test" "./internal/$package"
             capabilities=()
@@ -119,19 +116,13 @@ jobs:
             if docker exec bridge-systemd systemctl show --property Version --value >/dev/null 2>&1; then break; fi
             sleep 0.1
           done
-          docker exec bridge-systemd python3 /source/tests/check_systemd.py
-      - name: Python reference behavior
-        run: |
-          python3 -m pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt
-          make reference
-          python3 tests/reference_views.py --check
-          go test -race -tags reference -count=1 ./internal/gateway ./internal/state ./internal/publication ./internal/services
+          docker exec bridge-systemd /source/dist/release-tools check-systemd --root /source
       - name: Qualified offline OCI image and both container roles
         run: |
           sudo apt-get install --yes podman
-          python3 packaging/container.py prepare --arch ${{ matrix.arch }}
-          sudo python3 packaging/container.py build --arch ${{ matrix.arch }}
-          sudo python3 tests/check_container.py --arch ${{ matrix.arch }}
+          dist/release-tools container-prepare --arch ${{ matrix.arch }}
+          sudo dist/release-tools container-build --arch ${{ matrix.arch }}
+          sudo dist/release-tools check-container --arch ${{ matrix.arch }}
           for package in node services; do
             CGO_ENABLED=0 go test -c -tags integration -o "$RUNNER_TEMP/container-$package.test" "./internal/$package"
             capabilities=()

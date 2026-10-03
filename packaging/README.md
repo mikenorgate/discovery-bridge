@@ -1,9 +1,9 @@
 # Packages and router support
 
-Build native artifacts with Go 1.27.1, Python 3 and `dpkg-deb`:
+Build native artifacts with Go 1.27.1 and `dpkg-deb`:
 
 ```sh
-make artifacts VERSION=0.1.0-rc.1
+make artifacts VERSION=0.1.1
 ```
 
 The builder compiles once with CGo disabled and trimmed source paths, then puts
@@ -19,6 +19,10 @@ contents. It leaves the units disabled and installs the example under
 `/usr/share/doc/discovery-bridge/examples`, with no active configuration.
 Package upgrades leave service restart scheduling to the infrastructure owner.
 Stop the previous publisher before replacing a running installation.
+
+`cmd/release-tools` builds the packages and runs disposable qualification checks.
+It uses the same pinned Go SDK as the application and is excluded from release
+packages and runtime images. Deployment hosts need the released executable.
 
 Build a native container and OCI archive from that executable with Podman:
 
@@ -48,7 +52,7 @@ and recovery.
 Start a candidate from a clean source commit with:
 
 ```sh
-gh workflow run release.yml --repo mikenorgate/discovery-bridge --ref main -f version=0.1.0
+gh workflow run release.yml --repo mikenorgate/discovery-bridge --ref main -f version=0.1.1
 ```
 
 A pushed `vMAJOR.MINOR.PATCH` tag also starts the workflow. Both paths run the

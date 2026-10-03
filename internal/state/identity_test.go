@@ -1,8 +1,11 @@
 package state_test
 
 import (
+	"bytes"
 	"context"
-	"os/exec"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,7 +64,7 @@ func TestIdentityPersistenceAndCollision(t *testing.T) {
 	}
 }
 
-func TestPythonReopensGoState(t *testing.T) {
+func TestSQLiteSchemaAndIndependentWriter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "identities.db")
@@ -76,22 +79,31 @@ func TestPythonReopensGoState(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	script := `import sqlite3,hashlib,sys
-db=sqlite3.connect(sys.argv[1])
-wire=b'\x06sensor\x05local\x00'
-identity=hashlib.sha256(b'lan-a\x00'+wire).hexdigest()
-row=db.execute('SELECT identity,source,original,alias,collision FROM identities').fetchone()
-assert row==(identity,'lan-a',wire,sys.argv[3],0), row
-assert identity==sys.argv[2]
-suffix=hashlib.sha256((identity+':0').encode()).hexdigest()[:20]
-assert row[3]=='db-'+suffix+'.local.'
-assert db.execute('PRAGMA journal_mode').fetchone()[0]=='wal'
-with db: db.execute('UPDATE identities SET collision=collision+1 WHERE identity=?',(identity,))
-db.close()
-`
-	output, err := exec.CommandContext(ctx, "python3", "-c", script, path, id, alias).CombinedOutput()
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		t.Fatalf("Python SQLite interoperability failed: %v: %s", err, output)
+		t.Fatal(err)
+	}
+	wire := []byte("\x06sensor\x05local\x00")
+	hash := sha256.Sum256(append([]byte("lan-a\x00"), wire...))
+	expectedID := hex.EncodeToString(hash[:])
+	suffix := sha256.Sum256([]byte(expectedID + ":0"))
+	var storedID, source, storedAlias, journal string
+	var original []byte
+	var collision int
+	if err := db.QueryRowContext(ctx, "SELECT identity,source,original,alias,collision FROM identities").Scan(&storedID, &source, &original, &storedAlias, &collision); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journal); err != nil {
+		t.Fatal(err)
+	}
+	if storedID != expectedID || storedID != id || source != "lan-a" || !bytes.Equal(original, wire) || collision != 0 || storedAlias != alias || storedAlias != "db-"+hex.EncodeToString(suffix[:])[:20]+".local." || journal != "wal" {
+		t.Fatal("SQLite schema or stable identity differs", storedID, source, original, storedAlias, collision, journal)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE identities SET collision=collision+1 WHERE identity=?", id); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
 	}
 	store, err = state.Open(ctx, path, "db-")
 	if err != nil {
@@ -104,6 +116,6 @@ db.close()
 	})
 	_, same, err := store.Alias(ctx, "lan-a", "sensor.local.", false)
 	if err != nil || same != alias {
-		t.Fatal("Python write broke Go state", err)
+		t.Fatal("independent SQLite write broke identity state", err)
 	}
 }

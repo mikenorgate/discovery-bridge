@@ -1,4 +1,4 @@
-.PHONY: test reference build check artifacts container
+.PHONY: test build tools check artifacts container
 
 VERSION ?= 0.0.0-dev
 ARCH ?= $(shell go env GOARCH)
@@ -6,24 +6,25 @@ ARCH ?= $(shell go env GOARCH)
 test:
 	go test -race -shuffle=on ./...
 
-reference:
-	cd reference/python && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
-
 build:
 	mkdir -p dist
 	CGO_ENABLED=0 go build -trimpath -o dist/discovery-bridge ./cmd/discovery-bridge
 
-artifacts:
-	python3 packaging/build.py compile --version $(VERSION)
-	python3 packaging/build.py package --version $(VERSION) --arch $(ARCH)
-	python3 tests/check_artifacts.py --arch $(ARCH)
+tools:
+	mkdir -p dist
+	CGO_ENABLED=0 go build -trimpath -o dist/release-tools ./cmd/release-tools
 
-container:
-	python3 packaging/container.py prepare --arch $(ARCH)
-	python3 packaging/container.py build --arch $(ARCH)
-	python3 tests/check_container.py --arch $(ARCH)
+artifacts: tools
+	dist/release-tools compile --version $(VERSION)
+	dist/release-tools package --version $(VERSION) --arch $(ARCH)
+	dist/release-tools check-artifacts --arch $(ARCH)
+
+container: tools
+	dist/release-tools container-prepare --arch $(ARCH)
+	dist/release-tools container-build --arch $(ARCH)
+	dist/release-tools check-container --arch $(ARCH)
 
 check:
-	python3 tests/check_public.py
+	go run ./cmd/release-tools check-source
 	test -z "$$(gofmt -l cmd internal registry)"
 	go vet ./...

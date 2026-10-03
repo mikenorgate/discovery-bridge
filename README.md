@@ -5,7 +5,7 @@ explicitly published Services. Avahi owns LAN browsing, probing and publication.
 The adapters retain record expiry, apply address policy and answer opted-in pods
 without forwarding LAN questions into them or advertising individual pods.
 
-The Go port is in progress. The binary provides the router collector and
+The binary provides the router collector and
 independent publisher, node broker, unprivileged responder, Kubernetes Service
 publisher and registry descriptions.
 Tested libraries cover
@@ -16,8 +16,8 @@ The collector samples existing TAYGA readiness without allocating mappings.
 Selected ready Services publish only admitted VIPs and external ports.
 Native archives, Debian packages and OCI images share one versioned executable;
 the release workflow qualifies both architectures before publishing those
-outputs. Published candidates still require live acceptance. The Python snapshot provides a
-behavioral reference with synthetic fixtures.
+outputs. Published candidates still require live acceptance. Synthetic fixtures
+check DNS wire formats, persistent aliases and publication contracts.
 
 ## Build
 
@@ -33,15 +33,6 @@ dist/discovery-bridge registry describe --locale de _http._tcp
 The build embeds the pinned Avahi and IANA service type data. Unknown observed
 types retain their raw description. Generated service names follow RFC6335.
 
-Run the reference tests with Python 3.14 and hash-verified dependencies:
-
-```sh
-python3 -m venv .venv
-.venv/bin/pip install --require-hashes --only-binary=:all: -r reference/python/requirements-test.txt
-cd reference/python
-PYTHONDONTWRITEBYTECODE=1 ../../.venv/bin/python -m unittest discover -s tests -v
-```
-
 Linux namespace integration tests require root and an isolated test environment
 with `iproute2`, `util-linux`, `dbus`, `avahi-daemon` and `ethtool`. CI runs them on disposable native AMD64
 and ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/node
@@ -54,10 +45,9 @@ Service readiness withdrawal and stopped-producer lease expiry. The translator l
 Raw receive copies leave Avahi's UDP port ownership intact. CI also runs these
 checks in a restricted Debian 13 container.
 
-With the reference dependencies installed, run
-`go test -tags reference ./internal/gateway ./internal/state ./internal/publication
-./internal/services` to check HTTP delivery, SQLite ownership and Service DNS
-wire compatibility with the Python reference.
+`make test` includes HTTP delivery, SQLite schema and ownership, persistent alias
+fixtures, publication frames and Service DNS wire data. Fixtures use documentation
+networks and retain opaque TXT bytes and invalid UTF-8 name cases.
 
 ## Configuration and deployment
 
@@ -67,9 +57,9 @@ and isolated test networks. The public repository contains application source,
 registry data and tests; deployment inventories and captured traffic stay with
 the operator's infrastructure repository.
 
-The [compatibility contract](docs/CONTRACT.md) records the behavior the port must
-preserve. The [Go/Python comparison](docs/PERFORMANCE.md) records a reproducible
-worker workload and container sizes. Binaries, Debian packages and platform images share one versioned
+The [compatibility contract](docs/CONTRACT.md) records required behavior.
+[Worker measurements](docs/PERFORMANCE.md) record measured resource use and
+container size. Binaries, Debian packages and platform images share one versioned
 source build. Router deployment and Kubernetes reconciliation
 remain the infrastructure owner's responsibility.
 

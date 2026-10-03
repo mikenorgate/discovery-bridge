@@ -18,7 +18,7 @@ type Generation struct {
 	db     *sql.DB
 }
 
-// OpenGeneration increments the existing Python gateway_generation schema once.
+// OpenGeneration increments the existing gateway_generation schema once.
 func OpenGeneration(ctx context.Context, path string) (_ *Generation, err error) {
 	if !filepath.IsAbs(path) {
 		return nil, errors.New("absolute generation path required")

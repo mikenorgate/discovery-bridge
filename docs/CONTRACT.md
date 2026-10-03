@@ -75,5 +75,6 @@ Keep these SQLite tables and canonical DNS wire encodings:
 
 Alias identity hashes combine the source, a zero byte and the canonical original
 DNS name. Existing reservations and aliases remain stable. WAL, synchronous
-transactions and producer locks retain their current behavior. Test the Python
-reference reopening a database written by Go before relying on rollback.
+transactions and producer locks retain their current behavior. Fixtures check
+stored rows, reserved wire names and reopening after an independent SQLite writer.
+Live rollback must retain state and advance the gateway generation.

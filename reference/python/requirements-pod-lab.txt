@@ -1,5 +1,0 @@
-# Test clients only: CPython 3.13 Linux AMD64 and ARM64 wheels.
-# The discovery runtime does not import zeroconf or require compilation.
--r requirements-gateway.txt
-zeroconf==0.151.1 --hash=sha256:6fd382b515a8ddeadd44e66852d570da94a9abc609b356e7f79ab3a65986219c --hash=sha256:8c4e99dce44d7e630026c4adeb96352a82384f599139af525f67c9c6954ba4ba
-ifaddr==0.2.0 --hash=sha256:085e0305cfe6f16ab12d72e2024030f5d52674afad6911bb1eee207177b8a748
