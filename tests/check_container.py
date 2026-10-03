@@ -9,14 +9,8 @@ import tarfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--arch', required=True, choices=('amd64', 'arm64'))
-    args = parser.parse_args()
-    directory = ROOT / 'dist/releases' / args.arch
-    metadata = json.loads((directory / 'container.json').read_text())
+def inspect_archive(archive, metadata):
     image = metadata['image']
-    archive = directory / image['archive']
     with archive.open('rb') as source:
         assert hashlib.file_digest(source, 'sha256').hexdigest() == image['sha256']
     with tarfile.open(archive) as tar:
@@ -48,7 +42,7 @@ def main():
         assert manifest['schemaVersion'] == 2
         assert manifest['config']['digest'] == image['config_digest']
         config = json.load(blob(manifest['config']))
-        assert config['architecture'] == args.arch and config['os'] == 'linux'
+        assert config['architecture'] == metadata['architecture'] and config['os'] == 'linux'
         for layer in manifest['layers']:
             assert layer['digest'].startswith('sha256:')
             assert tar.getmember('blobs/sha256/' + layer['digest'].removeprefix('sha256:')).size == layer['size']
@@ -62,6 +56,17 @@ def main():
         assert runtime['Labels']['org.opencontainers.image.revision'] == metadata['source_commit']
         assert runtime['Labels']['org.opencontainers.image.version'] == metadata['version']
         assert runtime['Labels']['org.opencontainers.image.source'] == 'https://github.com/mikenorgate/discovery-bridge'
+    return descriptor
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--arch', required=True, choices=('amd64', 'arm64'))
+    args = parser.parse_args()
+    directory = ROOT / 'dist/releases' / args.arch
+    metadata = json.loads((directory / 'container.json').read_text())
+    image = metadata['image']
+    inspect_archive(directory / image['archive'], metadata)
     base = ['podman', 'run', '--rm', '--network=none', '--read-only', '--cap-drop=ALL',
             '--security-opt=no-new-privileges', '--memory=192m', '--pids-limit=64']
 

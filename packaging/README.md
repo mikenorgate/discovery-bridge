@@ -41,8 +41,34 @@ every referenced blob, architecture, imported executable bytes, CLI versions
 and image defaults. CI runs the actual broker and Service producer from this
 imported image with isolated API/CRI JSON fixtures. It tests pod admission and
 withdrawal, native replies, Service readiness withdrawal, independent expiry
-and recovery. Publishing the multi-architecture index and versioned release
-assets remains in progress.
+and recovery.
+
+## Candidate releases
+
+Start a candidate from a clean source commit with:
+
+```sh
+gh workflow run release.yml --repo mikenorgate/discovery-bridge --ref main -f version=0.1.0
+```
+
+A pushed `vMAJOR.MINOR.PATCH` tag also starts the workflow. Both paths run the
+same native AMD64 and ARM64 qualification used by CI. The publishing job takes
+only the resulting artifacts; it does not rebuild them. It joins their OCI
+manifests into one index and uses Skopeo to preserve each qualified digest.
+Registry checks verify the index and both platform manifests after publication.
+
+The GitHub prerelease contains both Debian packages, binary tarballs, offline
+OCI archives, `SHA256SUMS` and `release.json`. Metadata records the source commit,
+Go compiler, compatibility schemas, native qualification run, package checksums,
+platform image digests and combined image digest. Deploy by those recorded
+checksums and digests. Do not reuse a version for changed source or artifacts.
+
+Keep the release marked as a prerelease until the infrastructure owner's live
+acceptance passes. Promote that existing release with `gh release edit <tag>
+--prerelease=false`; promotion does not change its artifacts or image digest.
+Local reproduction uses the two `make` commands above on native Linux runners
+with the pinned Go compiler, `dpkg-deb` and Podman. Qualification uses the
+commands in `.github/workflows/ci.yml` and needs isolated network namespaces.
 
 This directory provides units, account definitions, shared-state permissions
 and D-Bus policy for the Debian package. Package installation must leave
@@ -69,4 +95,4 @@ retaining database contents and leaving discovery inactive. Restricted network
 fixtures select the installed executable for worker replies and real Avahi
 collector, publisher and Service-producer behavior. A disposable systemd
 container checks unit startup, credentials, resource limits and watchdog
-recovery. Container releases and deployment qualification remain in progress.
+recovery. Live deployment qualification remains with the infrastructure owner.

@@ -104,9 +104,7 @@ func TestActualServicePublisherCLIPublishesAndWithdraws(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := exec.CommandContext(ctx, binary, "kubernetes-publisher", "--config", path)
-	// Older Podman profiles deny pidfd_send_signal without CAP_KILL. The fixture
-	// signals only its same-UID child through kill(2), keeping the producer's
-	// capability set empty and cancellation effective while it is stopped.
+	// The fixture signals only its own same-UID child without capabilities.
 	command.Cancel = func() error { return syscall.Kill(command.Process.Pid, syscall.SIGKILL) }
 	command.WaitDelay = time.Second
 	command.Env = append(os.Environ(), "GOMAXPROCS=2", "DISCOVERY_BRIDGE_SERVICE_TEST_SOURCE="+source)
@@ -114,7 +112,24 @@ func TestActualServicePublisherCLIPublishesAndWithdraws(t *testing.T) {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = syscall.Kill(command.Process.Pid, syscall.SIGKILL); _ = command.Wait() })
+	t.Cleanup(func() {
+		_ = syscall.Kill(command.Process.Pid, syscall.SIGKILL)
+		finished := make(chan struct{})
+		go func() { _ = command.Wait(); close(finished) }()
+		select {
+		case <-finished:
+		case <-time.After(2 * time.Second):
+			t.Error("fixture could not reap its child within the cleanup deadline")
+		}
+	})
+	signalChild := func(sig syscall.Signal) {
+		t.Helper()
+		if err := syscall.Kill(command.Process.Pid, sig); err != nil {
+			parent, _ := os.ReadFile("/proc/thread-self/attr/current")
+			child, _ := os.ReadFile("/proc/" + strconv.Itoa(command.Process.Pid) + "/attr/current")
+			t.Fatalf("fixture signal %s: %v; parent label %q, child label %q", sig, err, parent, child)
+		}
+	}
 	wait := func(count int, timeout time.Duration) {
 		t.Helper()
 		for deadline := time.Now().Add(timeout); len(r.Records(catalog.Now())) != count; {
@@ -163,12 +178,8 @@ func TestActualServicePublisherCLIPublishesAndWithdraws(t *testing.T) {
 	wait(0, 7*time.Second)
 	writeSource(true)
 	wait(6, 7*time.Second)
-	if err := syscall.Kill(command.Process.Pid, syscall.SIGSTOP); err != nil {
-		t.Fatal(err)
-	}
+	signalChild(syscall.SIGSTOP)
 	wait(0, 17*time.Second)
-	if err := syscall.Kill(command.Process.Pid, syscall.SIGCONT); err != nil {
-		t.Fatal(err)
-	}
+	signalChild(syscall.SIGCONT)
 	wait(6, 7*time.Second)
 }

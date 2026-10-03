@@ -5,12 +5,23 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: 0.0.0-ci
+      save_artifacts:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+env:
+  RELEASE_VERSION: ${{ inputs.version || '0.0.0-ci' }}
+
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ inputs.version }}
   cancel-in-progress: true
 
 jobs:
@@ -46,7 +57,7 @@ jobs:
         run: |
           go vet ./...
           go test -race -shuffle=on -count=1 ./...
-          make artifacts VERSION=0.0.0-ci ARCH=${{ matrix.arch }}
+          make artifacts VERSION="$RELEASE_VERSION" ARCH=${{ matrix.arch }}
           dist/native/${{ matrix.arch }}/discovery-bridge version
       - name: Isolated namespace integration
         run: |
@@ -61,9 +72,9 @@ jobs:
             --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
             discovery-bridge-integration python3 tests/check_debian_install.py \
-            dist/releases/${{ matrix.arch }}/discovery-bridge_0.0.0-ci_${{ matrix.arch }}.deb
+            dist/releases/${{ matrix.arch }}/discovery-bridge_${RELEASE_VERSION}_${{ matrix.arch }}.deb
           docker build --tag discovery-bridge-package --file tests/Containerfile.package \
-            --build-arg PACKAGE=discovery-bridge_0.0.0-ci_${{ matrix.arch }}.deb \
+            --build-arg PACKAGE=discovery-bridge_${RELEASE_VERSION}_${{ matrix.arch }}.deb \
             dist/releases/${{ matrix.arch }}
           docker run --rm --network none --read-only \
             --tmpfs /tmp:rw,nosuid,nodev,exec --memory 192m --pids-limit 64 \
@@ -136,6 +147,14 @@ jobs:
               --volume "$RUNNER_TEMP/container-$package.test:/lab/test:ro" \
               --entrypoint /lab/test localhost/discovery-bridge-qualified:${{ matrix.arch }} -test.timeout=90s -test.v
           done
+      - name: Retain qualified platform artifacts
+        if: ${{ inputs.save_artifacts }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qualified-${{ matrix.arch }}
+          path: dist/releases/${{ matrix.arch }}/*
+          if-no-files-found: error
+          retention-days: 7
 
   lint:
     name: Lint and vulnerabilities

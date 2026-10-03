@@ -70,9 +70,6 @@ func TestRouterRoleProcess(t *testing.T) {
 		return
 	}
 	unix.Umask(0007)
-	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer cancel()
 	if role == "kubernetes-publisher" {
@@ -392,7 +389,9 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		if name == "kubernetes-publisher" {
 			path, caps = producerConfig, nil
 		}
-		command := exec.CommandContext(ctx, binary, "-test.run=^TestRouterRoleProcess$", "-test.v")
+		// Set this thread-local flag before exec so every Go runtime thread
+		// inherits the boundary, including when testing the fixture executable.
+		command := exec.CommandContext(ctx, "setpriv", "--no-new-privs", binary, "-test.run=^TestRouterRoleProcess$", "-test.v")
 		if runtimeBinary := os.Getenv("DISCOVERY_BRIDGE_TEST_BINARY"); runtimeBinary != "" {
 			// setpriv establishes the same no-new-privileges boundary that
 			// systemd and the production container supply to the real binary.
