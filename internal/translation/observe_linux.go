@@ -79,13 +79,15 @@ func installed(profile config.Translator, spaces catalog.Translation, nat46 bool
 		if !slices.Contains(l.Flags, "UP") || l.Info.Kind != "tun" || l.Info.Data.Type != "tun" {
 			return false
 		}
-		addresses := make(map[string]bool)
+		addresses := make(map[netip.Addr]bool)
 		for _, a := range l.Addresses {
 			if !a.Tentative && !a.Deprecated && string(a.Valid) != "0" && string(a.Preferred) != "0" {
-				addresses[a.Local] = true
+				if address, err := netip.ParseAddr(a.Local); err == nil {
+					addresses[address] = true
+				}
 			}
 		}
-		if !addresses[profile.IPv4] || !addresses[profile.IPv6] {
+		if !addresses[netip.MustParseAddr(profile.IPv4)] || !addresses[netip.MustParseAddr(profile.IPv6)] {
 			return false
 		}
 	}
@@ -96,28 +98,34 @@ func installed(profile config.Translator, spaces catalog.Translation, nat46 bool
 	if nat46 {
 		pool = spaces.Pool.String()
 	}
-	found := make(map[string]bool)
+	found := make(map[netip.Prefix]bool)
 	for _, r := range routes {
 		if r.Device == profile.Interface && r.usable() && r.Gateway == "" {
-			found[r.Destination] = true
+			if prefix, err := routePrefix(r.Destination); err == nil {
+				found[prefix] = true
+			}
 		}
 	}
-	return found[profile.Prefix] && found[pool]
+	return found[netip.MustParsePrefix(profile.Prefix)] && found[netip.MustParsePrefix(pool)]
+}
+
+func routePrefix(destination string) (netip.Prefix, error) {
+	if destination == "default" || destination == "" {
+		destination = "::/0"
+	}
+	prefix, err := netip.ParsePrefix(destination)
+	if err != nil {
+		if address, parseErr := netip.ParseAddr(destination); parseErr == nil {
+			return netip.PrefixFrom(address, address.BitLen()), nil
+		}
+	}
+	return prefix, err
 }
 
 func targetRouted(target netip.Addr, routes []route, lans map[string]bool) bool {
 	longest, allowed := -1, false
 	for _, r := range routes {
-		destination := r.Destination
-		if destination == "default" || destination == "" {
-			destination = "::/0"
-		}
-		prefix, err := netip.ParsePrefix(destination)
-		if err != nil {
-			if address, parseErr := netip.ParseAddr(destination); parseErr == nil {
-				prefix, err = netip.PrefixFrom(address, address.BitLen()), nil
-			}
-		}
+		prefix, err := routePrefix(r.Destination)
 		if err != nil || !prefix.Addr().Is6() || !prefix.Contains(target) {
 			continue
 		}

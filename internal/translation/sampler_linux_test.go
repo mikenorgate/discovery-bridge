@@ -101,6 +101,11 @@ func TestTargetRequiresSpecificUsableLANRoute(t *testing.T) {
 	if !installed(*s.settings.NAT46, s.spaces, true, links, routes) || !targetRouted(target, routes, s.lans) {
 		t.Fatal("installed fixture rejected")
 	}
+	profile := *s.settings.NAT46
+	profile.IPv6, profile.Prefix = "2001:0db8:0046:ffff::1", "2001:0db8:0046::/96"
+	if !installed(profile, s.spaces, true, links, routes) {
+		t.Fatal("equivalent valid IPv6 representation lost readiness")
+	}
 	for _, additions := range [][]route{
 		{{Destination: target.String() + "/128", Type: "blackhole"}},
 		{{Destination: target.String(), Type: "blackhole"}},
