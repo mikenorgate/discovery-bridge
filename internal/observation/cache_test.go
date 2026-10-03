@@ -144,3 +144,64 @@ func TestCapacityAndClockFailureDiscardTheEpoch(t *testing.T) {
 		t.Fatal("backwards clock retained observations")
 	}
 }
+
+func TestQueuedWireEvidenceKeepsReceiveExpiryAndNewerObservations(t *testing.T) {
+	c := New()
+	r := observed(t, "192.0.2.42", 4, 5)
+	if err := c.Hint("browser", r, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.IngestAt([]Record{r}, time.Second, 3*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if values := recordsAt(t, c, 3); len(values) != 1 || values[0].Expires.Sub(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) != 3*time.Second {
+		t.Fatal("queued observation acquired extra lifetime", values)
+	}
+	if err := c.IngestAt([]Record{r}, 5*time.Second, 5*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	goodbye := observed(t, "192.0.2.42", 6, 0)
+	if err := c.IngestAt([]Record{goodbye}, 2*time.Second, 6*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.IngestAt([]Record{r}, time.Second, 6*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if len(recordsAt(t, c, 7)) != 1 || len(recordsAt(t, c, 10)) != 0 {
+		t.Fatal("late old data or goodbye replaced a newer observation")
+	}
+	if err := c.IngestAt([]Record{r}, time.Second, 11*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if len(recordsAt(t, c, 11)) != 0 {
+		t.Fatal("already expired queued data reappeared")
+	}
+}
+
+func TestQueuedOldRRSetCannotReappearAfterNewFlushExpires(t *testing.T) {
+	c := New()
+	old, fresh := observed(t, "192.0.2.42", 4, 30), observed(t, "192.0.2.43", 6, 1)
+	for _, r := range []Record{old, fresh} {
+		if err := c.Hint("browser", r, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.IngestAt([]Record{fresh}, 2*time.Second, 2*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if len(recordsAt(t, c, 3)) != 0 {
+		t.Fatal("new flush did not expire")
+	}
+	if err := c.IngestAt([]Record{old}, 0, 4*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if len(recordsAt(t, c, 4)) != 0 {
+		t.Fatal("delayed old RRset escaped newer cross-family cache flush")
+	}
+	if err := c.IngestAt([]Record{old}, 4*time.Second, 4*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if len(recordsAt(t, c, 4)) != 1 {
+		t.Fatal("fresh wire evidence was withheld after a flush")
+	}
+}

@@ -18,6 +18,10 @@ type Interface struct {
 	Addresses []netip.Addr `json:"addresses"`
 }
 
+// CurrentInterface captures an up multicast interface in the caller's namespace.
+// Router processes use it directly; broker admission uses Namespace.Inspect.
+func CurrentInterface(name string) (Interface, error) { return inspectInterface(name) }
+
 // Inspect verifies direct Linux interface state against the API/CRI addresses.
 func (n *Namespace) Inspect(name string, expected []netip.Addr) (result Interface, err error) {
 	err = n.With(func() error {

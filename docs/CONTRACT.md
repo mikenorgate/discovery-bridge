@@ -17,6 +17,8 @@ hint cannot renew an expired packet observation. Lose all hints when Avahi's
 D-Bus owner changes, its running state ends or a bounded event queue overflows.
 Observe kernel-reassembled raw UDP copies without competing for Avahi's unicast
 port. Require receive metadata, hop 255, UDP port 5353 and valid checksums.
+Queued observations retain their receive timestamps. A delayed packet cannot
+renew an expired observation or undo a newer cache flush on another family.
 
 Retain known-answer suppression, cache-flush ownership, QU questions, legacy
 unicast replies, family-specific multicast history and bounded packet sizes.
@@ -51,6 +53,11 @@ and coherent records with persistent name ownership. Receiver cache TTL is one
 second. Disconnect, invalid replacement or an expired lease withdraws ownership.
 Run groups concurrently within the twelve-group bound; retain each group's
 ordered D-Bus calls. A stalled D-Bus writer cannot extend a publication lease.
+The collector and publisher capture their own topology generations. A link or
+address notification closes captured sockets and withdraws the old epoch before
+reopening. Reconnecting a collector requires fresh wire evidence even while
+Avahi retains its cache. The pod feed preserves original names as shared answers;
+LAN publication probes stable aliases and original hosts on their other links.
 
 Broker IPC remains bounded JSON over Unix `SOCK_SEQPACKET`, with at most two
 socket descriptors per message. The broker owns namespace admission; the

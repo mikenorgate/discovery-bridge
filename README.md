@@ -5,12 +5,14 @@ explicitly published Services. Avahi owns LAN browsing, probing and publication.
 The adapters retain record expiry, apply address policy and answer opted-in pods
 without forwarding LAN questions into them or advertising individual pods.
 
-The Go port is in progress. The binary provides the node broker and its
-unprivileged responder, plus registry descriptions. Tested libraries cover
+The Go port is in progress. The binary provides the router collector and
+independent publisher, node broker, unprivileged responder and registry descriptions.
+Tested libraries cover
 leased catalogs, DNS-SD responses, address policy, HTTP feeds, SQLite state and
 interface-scoped Avahi observations with independent wire expiry.
-The independent Avahi publisher and its local producer protocol are also under test.
-Router adapters and release packages are still being implemented. The Python
+Router tests use a real Avahi daemon and separate unprivileged processes.
+Translator readiness, Kubernetes Service publication and release packages are
+still being implemented. The Python
 snapshot provides a behavioral reference with synthetic fixtures.
 
 ## Build
@@ -37,10 +39,11 @@ PYTHONDONTWRITEBYTECODE=1 ../../.venv/bin/python -m unittest discover -s tests -
 ```
 
 Linux namespace integration tests require root and an isolated test environment
-with `iproute2`, `util-linux` and `dbus`. CI runs them on disposable native AMD64
+with `iproute2`, `util-linux`, `dbus`, `avahi-daemon` and `ethtool`. CI runs them on disposable native AMD64
 and ARM64 runners. `go test -tags integration ./internal/linuxnet ./internal/node
-./internal/avahi ./internal/observation` checks pod replies, namespace restoration,
-worker cleanup, D-Bus ownership loss, and fragmented IPv4/IPv6 LAN responses.
+./internal/avahi ./internal/observation ./internal/router` checks pod replies,
+namespace restoration, worker cleanup, D-Bus ownership loss, fragmented IPv4/IPv6
+LAN responses, collector restart and independent publication expiry.
 Raw receive copies leave Avahi's UDP port ownership intact. CI also runs these
 checks in a restricted Debian 13 container.
 
@@ -60,6 +63,19 @@ The [compatibility contract](docs/CONTRACT.md) records the behavior the port mus
 preserve. Binaries, Debian packages and multi-architecture containers will share
 one versioned source build. Router deployment and Kubernetes reconciliation
 remain the infrastructure owner's responsibility.
+
+Router roles share one explicit configuration:
+
+```sh
+discovery-bridge publisher --config /etc/discovery-bridge/router.json
+discovery-bridge collector --config /etc/discovery-bridge/router.json
+```
+
+Configure LAN interfaces and families, admitted source ranges, an alias prefix,
+the local D-Bus socket, identity database, publisher socket and collector account.
+An optional gateway listener requires a numeric bind address and explicit client
+ranges. Provision the identity database and its WAL files with group write access
+for both accounts. Packaging will provide the account and file setup.
 
 The [MIT license](LICENSE) covers project source. Pinned third-party registry
 data retain their [upstream notices](registry/COPYING.avahi).

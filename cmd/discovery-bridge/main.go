@@ -16,12 +16,18 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/config"
 	"github.com/mikenorgate/discovery-bridge/internal/node"
 	"github.com/mikenorgate/discovery-bridge/internal/registry"
+	"github.com/mikenorgate/discovery-bridge/internal/router"
 	registrydata "github.com/mikenorgate/discovery-bridge/registry"
 )
 
 var version = "development"
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && (args[0] == "collector" || args[0] == "publisher") {
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+		return runRouter(ctx, args, stdout, stderr)
+	}
 	if len(args) > 0 && (args[0] == "broker" || args[0] == "worker") {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
@@ -34,7 +40,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) < 2 || args[0] != "registry" || args[1] != "describe" {
-		if _, err := fmt.Fprintln(stderr, "usage: discovery-bridge version | registry describe [--locale language] _service._tcp | broker --config path [--node name]"); err != nil {
+		if _, err := fmt.Fprintln(stderr, "usage: discovery-bridge version | registry describe [--locale language] _service._tcp | broker --config path [--node name] | collector --config path | publisher --config path"); err != nil {
 			return 1
 		}
 		return 2
@@ -66,6 +72,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runRouter(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	path := flags.String("config", "", "absolute router configuration path")
+	if flags.Parse(args[1:]) != nil || flags.NArg() != 0 || *path == "" {
+		return 2
+	}
+	settings, err := config.LoadRouter(*path)
+	if err == nil {
+		if args[0] == "collector" {
+			err = router.RunCollector(ctx, settings, stdout)
+		} else {
+			err = router.RunPublisher(ctx, settings)
+		}
+	}
+	if err == nil || errors.Is(err, context.Canceled) {
+		return 0
+	}
+	if _, err := fmt.Fprintln(stderr, "router discovery stopped:", err); err != nil {
+		return 1
+	}
+	return 1
 }
 
 func runNode(ctx context.Context, args []string, stderr io.Writer) int {
