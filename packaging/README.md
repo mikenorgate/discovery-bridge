@@ -39,7 +39,7 @@ The builder exports under `dist/releases/<architecture>` and loads that OCI
 archive as `localhost/discovery-bridge-qualified:<architecture>`. Checks verify
 every referenced blob, architecture, imported executable bytes, CLI versions
 and image defaults. CI runs the actual broker and Service producer from this
-imported image with isolated API/CRI JSON fixtures. It tests pod admission and
+imported image using runc, with isolated API/CRI JSON fixtures. It tests pod admission and
 withdrawal, native replies, Service readiness withdrawal, independent expiry
 and recovery.
 
@@ -64,8 +64,13 @@ platform image digests and combined image digest. Deploy by those recorded
 checksums and digests. Do not reuse a version for changed source or artifacts.
 
 Keep the release marked as a prerelease until the infrastructure owner's live
-acceptance passes. Promote that existing release with `gh release edit <tag>
---prerelease=false`; promotion does not change its artifacts or image digest.
+acceptance passes. Promote that existing release with:
+
+```sh
+gh release edit <tag> --prerelease=false
+```
+
+Promotion does not change its artifacts or image digest.
 Local reproduction uses the two `make` commands above on native Linux runners
 with the pinned Go compiler, `dpkg-deb` and Podman. Qualification uses the
 commands in `.github/workflows/ci.yml` and needs isolated network namespaces.

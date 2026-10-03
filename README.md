@@ -15,7 +15,8 @@ Router tests use a real Avahi daemon and separate unprivileged processes.
 The collector samples existing TAYGA readiness without allocating mappings.
 Selected ready Services publish only admitted VIPs and external ports.
 Native archives, Debian packages and OCI images share one versioned executable;
-the release workflow is still being implemented. The Python snapshot provides a
+the release workflow qualifies both architectures before publishing those
+outputs. Published candidates still require live acceptance. The Python snapshot provides a
 behavioral reference with synthetic fixtures.
 
 ## Build

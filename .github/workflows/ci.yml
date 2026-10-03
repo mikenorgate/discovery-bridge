@@ -140,7 +140,9 @@ jobs:
               capabilities+=(--cap-add SETUID --cap-add SETGID --cap-add NET_ADMIN)
               capabilities+=(--security-opt apparmor=unconfined --tmpfs /run)
             fi
-            sudo podman run --rm --network none --read-only \
+            # Match containerd's runc. Ubuntu's crun stacks an AppArmor profile
+            # whose signal rules deny even same-UID child signals with NNP.
+            sudo podman run --runtime=runc --rm --network none --read-only \
               --tmpfs /tmp:rw,nosuid,nodev,exec --memory 192m --pids-limit 64 \
               --cap-drop ALL --security-opt no-new-privileges "${capabilities[@]}" \
               --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \

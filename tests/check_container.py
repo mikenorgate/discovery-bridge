@@ -67,7 +67,7 @@ def main():
     metadata = json.loads((directory / 'container.json').read_text())
     image = metadata['image']
     inspect_archive(directory / image['archive'], metadata)
-    base = ['podman', 'run', '--rm', '--network=none', '--read-only', '--cap-drop=ALL',
+    base = ['podman', 'run', '--runtime=runc', '--rm', '--network=none', '--read-only', '--cap-drop=ALL',
             '--security-opt=no-new-privileges', '--memory=192m', '--pids-limit=64']
 
     def execute(program, *args):
