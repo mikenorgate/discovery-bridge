@@ -1,0 +1,253 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: discovery-bridge
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: automation
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: discovery-client
+  namespace: automation
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: discovery-broker
+  namespace: discovery-bridge
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: discovery-broker
+rules:
+- apiGroups: ['']
+  resources: [pods]
+  verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: discovery-broker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: discovery-broker
+subjects:
+- kind: ServiceAccount
+  name: discovery-broker
+  namespace: discovery-bridge
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: discovery-broker
+  namespace: discovery-bridge
+spec:
+  minReadySeconds: 5
+  selector:
+    matchLabels:
+      app: discovery-broker
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: discovery-broker
+    spec:
+      serviceAccountName: discovery-broker
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      terminationGracePeriodSeconds: 5
+      containers:
+      - name: broker
+        image: ghcr.io/mikenorgate/discovery-bridge:v0.1.5@sha256:f3c98a353602ad869708066c71a1f698f85125f0514197d16e82fd345c181157
+        imagePullPolicy: IfNotPresent
+        args: [broker, --config, /etc/discovery-bridge/broker/config.json, --node, $(NODE_NAME)]
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: GOMAXPROCS
+          value: '2'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: '1'
+            memory: 192Mi
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          appArmorProfile:
+            type: Unconfined
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop: [ALL]
+            add: [SYS_ADMIN, SYS_PTRACE, SETUID, SETGID]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/discovery-bridge/broker
+          readOnly: true
+        - name: api
+          mountPath: /var/run/discovery-api
+          readOnly: true
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: cri
+          mountPath: /run/containerd/containerd.sock
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: discovery-broker-config
+          defaultMode: 0444
+      - name: api
+        projected:
+          defaultMode: 0400
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 3600
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+              - key: ca.crt
+                path: ca.crt
+      - name: proc
+        hostPath:
+          path: /proc
+          type: Directory
+      - name: cri
+        hostPath:
+          path: /run/containerd/containerd.sock
+          type: Socket
+      - name: tmp
+        emptyDir:
+          medium: Memory
+          sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: discovery-publisher
+  namespace: discovery-bridge
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: discovery-publications
+  namespace: automation
+rules:
+- apiGroups: ['']
+  resources: [services]
+  resourceNames: [web]
+  verbs: [get]
+- apiGroups: [discovery.k8s.io]
+  resources: [endpointslices]
+  verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: discovery-publications
+  namespace: automation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: discovery-publications
+subjects:
+- kind: ServiceAccount
+  name: discovery-publisher
+  namespace: discovery-bridge
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discovery-publisher
+  namespace: discovery-bridge
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: discovery-publisher
+  template:
+    metadata:
+      labels:
+        app: discovery-publisher
+    spec:
+      serviceAccountName: discovery-publisher
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: publisher
+        image: ghcr.io/mikenorgate/discovery-bridge:v0.1.5@sha256:f3c98a353602ad869708066c71a1f698f85125f0514197d16e82fd345c181157
+        imagePullPolicy: IfNotPresent
+        args: [kubernetes-publisher, --config, /etc/discovery-bridge/publication/config.json]
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/discovery-bridge/publication
+          readOnly: true
+        - name: api
+          mountPath: /var/run/discovery-api
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: discovery-publications
+      - name: api
+        projected:
+          defaultMode: 0440
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 3600
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+              - key: ca.crt
+                path: ca.crt

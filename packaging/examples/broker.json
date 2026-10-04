@@ -1,0 +1,46 @@
+{
+  "enabled": true,
+  "node": "downward-api",
+  "kubectl": [
+    "/usr/bin/kubectl"
+  ],
+  "kubeconfig": "/etc/discovery-bridge/broker/kubeconfig",
+  "crictl": [
+    "/usr/bin/crictl"
+  ],
+  "runtime_endpoint": "unix:///run/containerd/containerd.sock",
+  "host_proc": "/host/proc",
+  "worker_uid": 65532,
+  "worker_gid": 65532,
+  "opt_in_key": "discovery-bridge-client",
+  "pod_interface": "eth0",
+  "rules": [
+    {
+      "namespace": "automation",
+      "service_account": "discovery-client",
+      "match_labels": {
+        "app": "home-automation"
+      }
+    }
+  ],
+  "gateway": {
+    "host": "2001:db8:2::1",
+    "port": 9443
+  },
+  "sources": {
+    "lan-a": [
+      "192.0.2.0/24",
+      "2001:db8:1::/64"
+    ],
+    "lan-b": [
+      "198.51.100.0/24",
+      "2001:db8:2::/64"
+    ],
+    "kubernetes": [
+      "2001:db8:ff00::/60"
+    ]
+  },
+  "forbidden": [
+    "2001:db8:f000::/56"
+  ]
+}

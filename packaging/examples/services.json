@@ -1,0 +1,30 @@
+{
+  "enabled": true,
+  "kubectl": [
+    "/usr/bin/kubectl"
+  ],
+  "kubeconfig": "/etc/discovery-bridge/publication/kubeconfig",
+  "gateway": {
+    "host": "2001:db8:2::1",
+    "port": 9444
+  },
+  "vip_networks": [
+    "2001:db8:ff00::/60"
+  ],
+  "forbidden": [
+    "2001:db8:f000::/56"
+  ],
+  "services": [
+    {
+      "namespace": "automation",
+      "name": "web",
+      "port": "http",
+      "type": "_http._tcp",
+      "instance": "Example web",
+      "txt": {
+        "path": "/"
+      },
+      "subtypes": []
+    }
+  ]
+}
