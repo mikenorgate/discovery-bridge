@@ -260,6 +260,11 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		}
 		run("ip", "address", "add", address4, "dev", lan)
 		run("ip", "address", "add", address6, "dev", lan, "nodad")
+		if i == 0 {
+			// A secondary egress address shares the LAN interface but must not
+			// become the source of discovery traffic or prevent startup.
+			run("ip", "address", "add", "2001:db8::61/128", "dev", lan, "nodad")
+		}
 		run("ip", "link", "set", lan, "up")
 		// Veth checksum offload leaves partial checksums in raw socket copies.
 		// Emulate packets arriving from a NIC with completed wire checksums.
@@ -343,6 +348,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	settings := config.Router{Enabled: true, Interfaces: []config.LAN{{Interface: "lan0", Source: "lan-a", Families: []int{4, 6}}, {Interface: "lan1", Source: "lan-b", Families: []int{4, 6}}}, Sources: map[string][]string{"lan-a": {"192.0.2.0/24", "2001:db8:1::/64"}, "lan-b": {"198.51.100.0/24", "2001:db8:2::/64"}}, AliasPrefix: "bridge", BusSocket: bus, State: filepath.Join(dir, "identities.db"), PublisherSocket: filepath.Join(dir, "publisher.sock"), ProducerUser: "nobody", Gateway: &config.Listener{Endpoint: config.Endpoint{Host: "127.0.0.1", Port: 19443}, Clients: []string{"127.0.0.1/32"}}}
+	settings.Forbidden = []string{"2001:db8::/64"}
 	settings.Sources["kubernetes"] = []string{"2001:db8:ff00::/60"}
 	settings.Publication = &config.PublicationListener{Listener: config.Listener{Endpoint: config.Endpoint{Host: "127.0.0.1", Port: 19444}, Clients: []string{"127.0.0.1/32"}}, Source: "kubernetes"}
 	write(settings.State, nil, 0660)

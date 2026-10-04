@@ -54,24 +54,26 @@ func capture(settings config.Router, receive bool) (_ *topology, err error) {
 		}
 		families := slices.Clone(lan.Families)
 		slices.Sort(families)
+		var local []netip.Addr
 		for _, address := range iface.Addresses {
-			if !address.Is6() || !address.IsLinkLocalUnicast() {
-				if err := scopes.CheckAddress(lan.Source, address); err != nil {
-					return nil, err
-				}
+			linkLocal := address.Is6() && address.IsLinkLocalUnicast()
+			if linkLocal || scopes.CheckAddress(lan.Source, address) == nil {
+				local = append(local, address)
 			}
 		}
 		t.links[iface.Index] = observation.Link{Source: lan.Source, Generation: generation, Families: families}
+		// Retain every local address for self-packet rejection; use only LAN
+		// addresses when binding discovery sockets.
 		t.addresses[iface.Index] = iface.Addresses
 		for _, family := range families {
 			if receive {
-				r, err := observation.OpenReceiver(lan.Interface, iface.Index, generation, family, iface.Addresses)
+				r, err := observation.OpenReceiver(lan.Interface, iface.Index, generation, family, local)
 				if err != nil {
 					return nil, err
 				}
 				t.receivers = append(t.receivers, r)
 			}
-			sender, err := observation.OpenSender(lan.Interface, iface.Index, family, iface.Addresses)
+			sender, err := observation.OpenSender(lan.Interface, iface.Index, family, local)
 			if err != nil {
 				return nil, err
 			}
