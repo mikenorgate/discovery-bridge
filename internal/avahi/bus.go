@@ -229,8 +229,8 @@ func (b *bus) call(ctx context.Context, path dbus.ObjectPath, method string, arg
 	owner := b.owner
 	b.mu.Unlock()
 	result := b.conn.Object(owner, path).CallWithContext(bounded, method, 0, args...)
-	if result.Err == nil {
-		result.Err = b.err()
+	if failure := b.err(); failure != nil {
+		result.Err = failure
 	}
 	return result
 }

@@ -138,7 +138,12 @@ type observationEvent struct {
 
 func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder) (err error) {
 	stop, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
+	defer func() {
+		if cause := context.Cause(stop); cause != nil && !errors.Is(cause, context.Canceled) {
+			err = errors.Join(cause, err)
+		}
+		cancel(nil)
+	}()
 	epoch := &collectorEpoch{done: stop.Done(), requests: make(chan demand, 64)}
 	withdrawn := make(chan struct{})
 	withdraw := context.AfterFunc(stop, func() { c.withdraw(epoch); close(withdrawn) })
@@ -170,6 +175,8 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 		return err
 	}
 	defer func() { _ = producer.Close() }()
+	// Backpressure absorbs normal discovery bursts without growing the queue or
+	// discarding hints. Epoch cancellation still releases every blocked reader.
 	events := make(chan observationEvent, 64)
 	var workers sync.WaitGroup
 	defer func() {
@@ -185,9 +192,6 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 			return false
 		case events <- event:
 			return true
-		default:
-			cancel(errors.New("collector observation queue exhausted"))
-			return false
 		}
 	}
 	workers.Go(func() {

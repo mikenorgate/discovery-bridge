@@ -31,15 +31,16 @@ func TestDeadlineClosesTransportEvenWhenDBusWriterStalls(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = unix.Kill(daemon.Process.Pid, unix.SIGCONT) }()
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	stop := context.AfterFunc(ctx, func() { b.fail(errors.New("publication lease expired")) })
-	defer stop()
+	expired := errors.New("publication lease expired")
+	timer := time.AfterFunc(150*time.Millisecond, func() { b.fail(expired) })
+	defer timer.Stop()
 	done := make(chan error, 1)
 	go func() { done <- b.call(ctx, "/", server+".Stalled", make([]byte, 64*1024)).Err }()
 	select {
 	case err := <-done:
-		if err == nil || b.err() == nil {
+		if !errors.Is(err, expired) || !errors.Is(b.err(), expired) {
 			t.Fatal("stalled writer did not lose its ownership epoch", err)
 		}
 	case <-time.After(time.Second):

@@ -479,20 +479,30 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			_ = receiver.Close()
 		}
 	})
-	message := dns.Msg{MsgHdr: dns.MsgHdr{Response: true, Authoritative: true}}
-	for _, record := range deviceRecords(t, time.Now().UTC()) {
-		rr, err := record.RR(12)
+	// A normal discovery burst includes many service instances and their hosts.
+	const devices = 30
+	const nativeRecords = 1 + devices*5
+	var packets [][]byte
+	for device := range devices {
+		message := dns.Msg{MsgHdr: dns.MsgHdr{Response: true, Authoritative: true}}
+		for _, record := range deviceRecords(t, time.Now().UTC()) {
+			suffix := "sensor-" + strconv.Itoa(device)
+			record.Name = strings.NewReplacer("Sensor", suffix, "sensor", suffix).Replace(record.Name)
+			record.Data = strings.NewReplacer("Sensor", suffix, "sensor", suffix).Replace(record.Data)
+			rr, err := record.RR(12)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rr.Header().Rrtype != dns.TypePTR {
+				rr.Header().Class |= 0x8000
+			}
+			message.Answer = append(message.Answer, rr)
+		}
+		wire, err := message.Pack()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rr.Header().Rrtype != dns.TypePTR {
-			rr.Header().Class |= 0x8000
-		}
-		message.Answer = append(message.Answer, rr)
-	}
-	wire, err := message.Pack()
-	if err != nil {
-		t.Fatal(err)
+		packets = append(packets, wire)
 	}
 	send := func() {
 		t.Helper()
@@ -501,8 +511,10 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			if i == 1 {
 				target.IP, target.Zone = net.ParseIP("ff02::fb"), strconv.Itoa(peerInterfaces[0].Index)
 			}
-			if _, err := producer.WriteToUDP(wire, target); err != nil {
-				t.Fatal(err)
+			for _, wire := range packets {
+				if _, err := producer.WriteToUDP(wire, target); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}
@@ -525,7 +537,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		collector.check(t)
 		publisher.check(t)
 		send()
-		if err := json.Unmarshal(read(), &payload); err == nil && len(payload.Snapshot.Records) == 6 {
+		if err := json.Unmarshal(read(), &payload); err == nil && len(payload.Snapshot.Records) == nativeRecords {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -535,7 +547,8 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	for _, record := range payload.Snapshot.Records {
-		if record.Type == "SRV" && record.Data != "0 0 8080 sensor.local." {
+		host := strings.TrimSuffix(record.Name, "._example._tcp.local.") + ".local."
+		if record.Type == "SRV" && record.Data != "0 0 8080 "+host {
 			t.Fatal("application hostname renamed", record)
 		}
 	}
@@ -568,7 +581,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			publisher.check(t)
 			// Shared enumeration RRsets carry the shortest member TTL. Allow
 			// the next collector tick to restore the surviving native member.
-			if serviceCount() == expected && (expected != 0 || len(payload.Snapshot.Records) == 6) {
+			if serviceCount() == expected && (expected != 0 || len(payload.Snapshot.Records) == nativeRecords) {
 				return
 			}
 			if time.Now().After(deadline) {
@@ -662,7 +675,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitServices(0, 17*time.Second)
-	if len(payload.Snapshot.Records) != 6 {
+	if len(payload.Snapshot.Records) != nativeRecords {
 		t.Fatal("expired Service intent disturbed native device discovery", payload.Snapshot.Records)
 	}
 	if err := serviceProducer.command.Process.Signal(syscall.SIGCONT); err != nil {
@@ -703,6 +716,10 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 	}
 	// A normal collector disconnect must clear both publication families while
 	// leaving the independent publisher process healthy and able to accept again.
+	data, err = os.ReadFile(collector.log)
+	if err != nil || strings.Contains(string(data), `"event":"discovery_epoch_lost"`) {
+		t.Fatalf("normal discovery burst lost its observation epoch: %v\n%s", err, data)
+	}
 	if err := collector.stop(); err != nil {
 		t.Fatal(err)
 	}
@@ -753,7 +770,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		send()
 		collector.check(t)
 		publisher.check(t)
-		if err := json.Unmarshal(read(), &payload); err == nil && len(payload.Snapshot.Records) == 6 {
+		if err := json.Unmarshal(read(), &payload); err == nil && len(payload.Snapshot.Records) == nativeRecords {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -782,7 +799,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		send()
 		collector.check(t)
 		publisher.check(t)
-		if err := json.Unmarshal(read(), &payload); err == nil && len(payload.Snapshot.Records) == 6 {
+		if err := json.Unmarshal(read(), &payload); err == nil && len(payload.Snapshot.Records) == nativeRecords {
 			break
 		}
 		if time.Now().After(deadline) {
