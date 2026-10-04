@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -195,9 +197,9 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 		}
 	}
 	workers.Go(func() {
-		_ = monitor.Wait()
+		err := monitor.Wait(slices.Collect(maps.Keys(t.links)))
+		cancel(errors.Join(errors.New("collector link or address generation changed"), err))
 		_ = t.close() // Invalidate sockets before any reused link index can send.
-		cancel(errors.New("collector link or address generation changed"))
 	})
 	workers.Go(func() {
 		for {

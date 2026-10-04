@@ -838,6 +838,17 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	// An unrelated address change must retain the complete observation epoch.
+	before := payload.Snapshot.Epoch
+	run("ip", "address", "add", "203.0.113.1/32", "dev", "lo")
+	for deadline := time.Now().Add(300 * time.Millisecond); time.Now().Before(deadline); {
+		collector.check(t)
+		publisher.check(t)
+		if err := json.Unmarshal(read(), &payload); err != nil || payload.Snapshot.Epoch != before || len(payload.Snapshot.Records) != nativeRecords {
+			t.Fatal("unrelated interface invalidated discovery", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	// An approved link address change invalidates both independently captured
 	// generations. The publisher exits so its systemd owner can reopen topology.
 	run("ip", "address", "add", "198.51.100.2/24", "dev", "lan1")

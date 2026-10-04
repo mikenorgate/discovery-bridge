@@ -2,6 +2,7 @@ package observation
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/miekg/dns"
@@ -360,8 +362,56 @@ func OpenMonitor() (_ *LinkMonitor, err error) {
 	return &LinkMonitor{socket: file}, nil
 }
 
-// Wait returns after one notification or loss; both require a fresh topology epoch.
-func (m *LinkMonitor) Wait() error { _, err := m.socket.Read(make([]byte, 65536)); return err }
+// Wait ignores other interfaces and returns on an admitted change or event loss.
+// Subscribe before capturing topology so changes during capture remain queued.
+func (m *LinkMonitor) Wait(indices []int) error {
+	if len(indices) == 0 {
+		return errors.New("explicit monitored interfaces required")
+	}
+	buffer := make([]byte, 65536)
+	for {
+		n, err := m.socket.Read(buffer)
+		if err != nil {
+			return err
+		}
+		changed, err := monitoredChange(buffer[:n], indices)
+		if changed || err != nil {
+			return err
+		}
+	}
+}
+
+func monitoredChange(data []byte, indices []int) (bool, error) {
+	messages, err := syscall.ParseNetlinkMessage(data)
+	if err != nil || len(messages) == 0 {
+		return false, errors.New("invalid topology notification")
+	}
+	for _, message := range messages {
+		minimum := 0
+		switch message.Header.Type {
+		case unix.RTM_NEWLINK, unix.RTM_DELLINK:
+			minimum = unix.SizeofIfInfomsg
+		case unix.RTM_NEWADDR, unix.RTM_DELADDR:
+			minimum = unix.SizeofIfAddrmsg
+		case unix.NLMSG_NOOP, unix.NLMSG_DONE:
+			continue
+		default:
+			return false, errors.New("topology notification lost or unexpected")
+		}
+		if len(message.Data) < minimum {
+			return false, errors.New("truncated topology notification")
+		}
+		// Both ifinfomsg and ifaddrmsg place their interface index at offset 4.
+		index := binary.NativeEndian.Uint32(message.Data[4:8])
+		if index == 0 {
+			return false, errors.New("invalid topology interface index")
+		}
+		if slices.Contains(indices, int(index)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // Close interrupts a pending notification wait.
 func (m *LinkMonitor) Close() error { return m.socket.Close() }

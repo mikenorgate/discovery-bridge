@@ -264,7 +264,7 @@ func TestRawReceiverLeavesUDPPortOwnershipAndReassemblesFullPackets(t *testing.T
 }
 
 func TestLinkMonitorReportsIsolatedAddressChangeAndCloses(t *testing.T) {
-	lan, _, _, _ := networkLab(t)
+	lan, _, iface, _ := networkLab(t)
 	var monitor *LinkMonitor
 	if err := lan.With(func() error { var err error; monitor, err = OpenMonitor(); return err }); err != nil {
 		t.Fatal(err)
@@ -275,6 +275,17 @@ func TestLinkMonitorReportsIsolatedAddressChangeAndCloses(t *testing.T) {
 		}
 	}()
 	if err := lan.With(func() error {
+		return exec.Command("ip", "address", "add", "198.51.100.1/32", "dev", "lo").Run()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := monitor.socket.SetReadDeadline(time.Now().Add(150 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := monitor.Wait([]int{iface.Index}); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatal("unrelated interface invalidated LAN topology", err)
+	}
+	if err := lan.With(func() error {
 		command := exec.Command("ip", "address", "add", "192.0.2.2/24", "dev", "lan0")
 		return command.Run()
 	}); err != nil {
@@ -283,7 +294,7 @@ func TestLinkMonitorReportsIsolatedAddressChangeAndCloses(t *testing.T) {
 	if err := monitor.socket.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if err := monitor.Wait(); err != nil {
+	if err := monitor.Wait([]int{iface.Index}); err != nil {
 		t.Fatal("address notification missing", err)
 	}
 }

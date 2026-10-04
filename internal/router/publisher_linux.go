@@ -3,9 +3,11 @@ package router
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"os"
 	"os/user"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -106,11 +108,11 @@ func RunPublisher(ctx context.Context, settings config.Router) (err error) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		_ = monitor.Wait()
+		err := monitor.Wait(slices.Collect(maps.Keys(t.links)))
+		cancel(errors.Join(errors.New("publisher link or address generation changed"), err))
 		// Close the old transmitters before relinquishing publication ownership:
 		// an interface index may now refer to a different link.
 		_ = t.close()
-		cancel(errors.New("publisher link or address generation changed"))
 	}()
 	defer func() { _ = monitor.Close(); <-finished }()
 	owner, err := avahi.ConnectPublisher(stop, settings.BusSocket, t.links, func(ctx context.Context, index, family int, answers []catalog.Answer) error {
