@@ -82,9 +82,12 @@ func (b *Broker) revokeAll() error {
 }
 
 // Expire runs independently of Kubernetes/runtime command progress.
-func (b *Broker) Expire(now time.Duration) error {
+func (b *Broker) Expire() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// Reconciliation and the lease timer both expire sockets. Sample under
+	// their shared lock so scheduling cannot reorder monotonic timestamps.
+	now := catalog.Now().Mono
 	if now < b.lastTick {
 		return errors.Join(errors.New("broker clock moved backwards"), b.revokeAll())
 	}
@@ -162,7 +165,7 @@ func (b *Broker) Reconcile(ctx context.Context, items []json.RawMessage, observe
 			}
 		}
 	}
-	return b.Expire(catalog.Now().Mono)
+	return b.Expire()
 }
 
 func (b *Broker) admit(ctx context.Context, pod Pod, deadline time.Duration) (err error) {
@@ -367,11 +370,10 @@ func RunBroker(ctx context.Context, settings config.Node, stderr io.Writer) (err
 		case err := <-refreshed:
 			return err
 		case <-ticker.C:
-			now := catalog.Now().Mono
-			if err := broker.Expire(now); err != nil {
+			if err := broker.Expire(); err != nil {
 				return err
 			}
-			if err := broker.Sync(int(worker.Channel.Fd()), now); err != nil {
+			if err := broker.Sync(int(worker.Channel.Fd()), catalog.Now().Mono); err != nil {
 				return err
 			}
 		}
