@@ -173,6 +173,26 @@ func TestOwnerLossOverflowAndFailureDiscardQueuedHints(t *testing.T) {
 	}
 }
 
+func TestBrowserProgressSignalsDoNotDisplaceRecords(t *testing.T) {
+	b := testBrowser(t)
+	for range catalog.MaxRecords + 1 {
+		for _, member := range []string{"AllForNow", "CacheExhausted"} {
+			b.bus.DeliverSignal("", "", &dbus.Signal{
+				Sender: ":1.42", Path: "/browser/1", Name: browserInterface + "." + member,
+			})
+		}
+	}
+	rr, err := dns.NewRR("_example._tcp.local. 120 IN PTR Example._example._tcp.local.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.bus.DeliverSignal("", "", itemSignal(t, "ItemNew", rr, 4))
+	event, err := b.Next(t.Context())
+	if err != nil || !event.Added || b.Err() != nil {
+		t.Fatal("progress notifications interrupted record delivery", event, err, b.Err())
+	}
+}
+
 func TestLinkConfigurationIsCopiedAndValidated(t *testing.T) {
 	for _, links := range []map[int]observation.Link{nil, {0: {Source: "a", Generation: "g", Families: []int{4}}}, {2: {Source: "a", Generation: "g", Families: []int{4, 4}}}, {2: {Source: "a", Generation: "g", Families: []int{7}}}} {
 		if _, err := newBrowser(links); err == nil {

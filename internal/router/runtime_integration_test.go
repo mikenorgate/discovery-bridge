@@ -176,6 +176,15 @@ func (p *labProcess) check(t *testing.T) {
 }
 
 func TestRouterRuntimeWithRealAvahi(t *testing.T) {
+	routerRuntimeLab(t, false)
+}
+
+func TestRouterRuntimeBurstWithRealAvahi(t *testing.T) {
+	routerRuntimeLab(t, true)
+}
+
+func routerRuntimeLab(t *testing.T, burst bool) {
+	t.Helper()
 	if os.Getenv("DISCOVERY_BRIDGE_TEST_LAB") == "" {
 		self, err := os.Executable()
 		if err != nil {
@@ -183,7 +192,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		command := exec.CommandContext(ctx, "unshare", "--mount", "--net", "--propagation", "private", self, "-test.run=^TestRouterRuntimeWithRealAvahi$", "-test.timeout=75s", "-test.v")
+		command := exec.CommandContext(ctx, "unshare", "--mount", "--net", "--propagation", "private", self, "-test.run=^"+t.Name()+"$", "-test.timeout=75s", "-test.v")
 		// All roles share this fixture's task budget. Match the two runtime
 		// processors used under each deployed role's fractional CPU limit.
 		command.Env = append(os.Environ(), "DISCOVERY_BRIDGE_TEST_LAB=1", "GOMAXPROCS=2")
@@ -479,9 +488,11 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			_ = receiver.Close()
 		}
 	})
-	// A normal discovery burst includes many service instances and their hosts.
-	const devices = 30
-	const nativeRecords = 1 + devices*5
+	devices, ttl := 1, uint32(12)
+	if burst {
+		devices, ttl = 30, 120
+	}
+	nativeRecords := 1 + devices*5
 	var packets [][]byte
 	for device := range devices {
 		message := dns.Msg{MsgHdr: dns.MsgHdr{Response: true, Authoritative: true}}
@@ -489,7 +500,7 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 			suffix := "sensor-" + strconv.Itoa(device)
 			record.Name = strings.NewReplacer("Sensor", suffix, "sensor", suffix).Replace(record.Name)
 			record.Data = strings.NewReplacer("Sensor", suffix, "sensor", suffix).Replace(record.Data)
-			rr, err := record.RR(12)
+			rr, err := record.RR(ttl)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -504,8 +515,15 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		}
 		packets = append(packets, wire)
 	}
+	var lastSent time.Time
 	send := func() {
 		t.Helper()
+		// Keep the initial burst intact, then renew once per second rather
+		// than flooding both families on every poll.
+		if time.Since(lastSent) < time.Second {
+			return
+		}
+		lastSent = time.Now()
 		for i, producer := range producers {
 			target := &net.UDPAddr{IP: net.ParseIP("224.0.0.251"), Port: 5353}
 			if i == 1 {
@@ -551,6 +569,19 @@ func TestRouterRuntimeWithRealAvahi(t *testing.T) {
 		if record.Type == "SRV" && record.Data != "0 0 8080 "+host {
 			t.Fatal("application hostname renamed", record)
 		}
+	}
+	if burst {
+		// Startup bursts exercise the bounded queues independently of the
+		// short-lease lifecycle test. Cancellation must release blocked readers.
+		data, err := os.ReadFile(collector.log)
+		if err != nil || strings.Contains(string(data), `"event":"discovery_epoch_lost"`) {
+			t.Fatalf("discovery burst lost its observation epoch: %v\n%s", err, data)
+		}
+		if err := collector.stop(); err != nil || collector.err != nil {
+			t.Fatal("burst collector did not stop cleanly", err, collector.err)
+		}
+		publisher.check(t)
+		return
 	}
 	serviceProducer := role("kubernetes-publisher", 65534)
 	serviceCount := func() int {

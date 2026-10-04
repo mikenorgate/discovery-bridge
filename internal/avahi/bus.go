@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/mikenorgate/discovery-bridge/internal/catalog"
 	"golang.org/x/sys/unix"
 )
 
@@ -43,7 +44,7 @@ type bus struct {
 }
 
 func newBus() *bus {
-	return &bus{failed: make(chan struct{}), signals: make(chan *dbus.Signal, 512), done: make(chan struct{})}
+	return &bus{failed: make(chan struct{}), signals: make(chan *dbus.Signal, catalog.MaxRecords), done: make(chan struct{})}
 }
 
 func (b *bus) fail(err error) {
@@ -99,6 +100,13 @@ func (b *bus) DeliverSignal(_ string, _ string, signal *dbus.Signal) {
 				b.fail(errors.New("avahi left running state"))
 			}
 		}
+		return
+	}
+	// Only record mutations, browser failures and group state affect an epoch.
+	// Cached-browser progress signals must not consume its fixed record budget.
+	switch signal.Name {
+	case browserInterface + ".ItemNew", browserInterface + ".ItemRemove", browserInterface + ".Failure", groupInterface + ".StateChanged":
+	default:
 		return
 	}
 	select {
