@@ -336,7 +336,7 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 			if err := browser.Retire(stop); err != nil {
 				return err
 			}
-			if err := notify(stop); err != nil {
+			if err := notify(stop, true); err != nil {
 				return err
 			}
 			wire, hints := cache.Counts()
@@ -450,6 +450,10 @@ func RunCollector(ctx context.Context, settings config.Router, output io.Writer)
 		if logErr := log.Encode(map[string]string{"event": "discovery_epoch_lost", "reason": err.Error()}); logErr != nil {
 			return logErr
 		}
+		// Recovery is active work; feed withdrawal already revoked the epoch.
+		if err := notify(stop, false); err != nil {
+			return err
+		}
 		if time.Since(began) > 30*time.Second {
 			delay = 500 * time.Millisecond
 		}
@@ -460,6 +464,6 @@ func RunCollector(ctx context.Context, settings config.Router, output io.Writer)
 			return context.Cause(stop)
 		case <-timer.C:
 		}
-		delay = min(30*time.Second, 2*delay)
+		delay = min(2*time.Second, 2*delay)
 	}
 }

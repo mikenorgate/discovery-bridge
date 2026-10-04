@@ -510,7 +510,7 @@ func (t tool) checkSystemd() (err error) {
 	if _, err := t.command(nil, "systemctl", "kill", "--signal=SIGSTOP", roles[1]); err != nil {
 		return err
 	}
-	deadline := time.Now().Add(12 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for {
 		current, err := t.properties(roles[1])
 		if err != nil {
@@ -540,6 +540,37 @@ func (t tool) checkSystemd() (err error) {
 	}
 	if collector["NRestarts"] != "1" || publisher["MainPID"] != initial[roles[0]]["MainPID"] || generation != first+2 {
 		return errors.New("unexpected unit restart or persistent generation")
+	}
+	// Publisher loss must use the collector's existing epoch recovery. A unit
+	// dependency restart would discard its in-memory original-name suppression.
+	if _, err := t.command(nil, "systemctl", "stop", roles[0]); err != nil {
+		return err
+	}
+	if err := t.pause(5 * time.Second); err != nil {
+		return err
+	}
+	if _, err := t.command(nil, "systemctl", "start", roles[0]); err != nil {
+		return err
+	}
+	deadline = time.Now().Add(12 * time.Second)
+	for {
+		generation, err = t.catalog()
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("collector did not recover publisher restart: %w", err)
+		}
+		if err := t.pause(100 * time.Millisecond); err != nil {
+			return err
+		}
+	}
+	recovered, err := t.healthy(roles[1])
+	if err != nil {
+		return err
+	}
+	if recovered["MainPID"] != collector["MainPID"] || recovered["NRestarts"] != collector["NRestarts"] || generation != first+2 {
+		return errors.New("publisher restart discarded collector process state")
 	}
 	if _, err := t.command(nil, "systemctl", "stop", roles[1], roles[0]); err != nil {
 		return err

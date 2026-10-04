@@ -147,7 +147,7 @@ func RunPublisher(ctx context.Context, settings config.Router) (err error) {
 		Owns:     func(name string) (bool, error) { return identities.Owns(stop, name) },
 		OwnsHost: func(source, name string) (bool, error) { return identities.OwnsHost(stop, source, name) },
 	}, Watchdog: func() {
-		if err := notify(stop); err != nil {
+		if err := notify(stop, true); err != nil {
 			cancel(err)
 		}
 	}}

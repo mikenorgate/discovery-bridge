@@ -68,15 +68,18 @@ func (c *Client) Send(ctx context.Context, intents []avahi.Intent) error {
 	if err != nil {
 		return err
 	}
+	var transferErr error
 	if n, err := c.connection.Write(payload); err != nil || n != len(payload) {
-		return errors.New("local publication transfer failed")
+		transferErr = errors.New("local publication transfer failed")
 	}
+	// An idle publisher may send its final CONFLICT and close before this write.
+	// Read that response within the existing deadline, even after a failed send.
 	reply, err := frameLine(c.reader)
 	if err != nil {
-		return err
+		return errors.Join(transferErr, err)
 	}
 	if string(reply) == "OK\n" {
-		return nil
+		return transferErr
 	}
 	if strings.HasPrefix(string(reply), "CONFLICT ") {
 		var names []string
@@ -90,7 +93,7 @@ func (c *Client) Send(ctx context.Context, intents []avahi.Intent) error {
 		}
 		return &Conflict{Names: names}
 	}
-	return errors.New("local publisher rejected snapshot")
+	return errors.Join(transferErr, errors.New("local publisher rejected snapshot"))
 }
 
 // Close releases the producer; the independent owner withdraws its publications.

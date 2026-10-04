@@ -171,31 +171,26 @@ func TestInvalidReplacementClearsPreviouslyAdmittedProducer(t *testing.T) {
 
 func TestOwnerFailureWakesIdleProducerAndPreservesConflictResponse(t *testing.T) {
 	path, owner := startServer(t, uint32(os.Geteuid()))
-	connection, err := net.Dial("unix", path)
+	client, err := Dial(context.Background(), path, "test-boot")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = connection.Close() }()
-	if err := connection.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+	defer func() { _ = client.Close() }()
+	if err := client.Send(context.Background(), nil); err != nil {
 		t.Fatal(err)
-	}
-	payload, err := Frame("test-boot", 1, catalog.Now().Mono, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := connection.Write(payload); err != nil {
-		t.Fatal(err)
-	}
-	reader := bufio.NewReader(connection)
-	if reply, err := reader.ReadString('\n'); err != nil || reply != "OK\n" {
-		t.Fatal(reply, err)
 	}
 	owner.mu.Lock()
 	owner.failure = errors.New("conflict")
 	owner.conflicts = []string{"host-alias.local."}
 	owner.mu.Unlock()
 	close(owner.failed)
-	if reply, err := reader.ReadString('\n'); err != nil || reply != "CONFLICT [\"host-alias.local.\"]\n" {
-		t.Fatal("owner loss lost conflict reply", reply, err)
+	// Force the next write to fail while leaving the final response readable.
+	// The publisher can close between snapshots, before the producer next sends.
+	if err := client.connection.(*net.UnixConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	var conflict *Conflict
+	if err := client.Send(context.Background(), nil); !errors.As(err, &conflict) || len(conflict.Names) != 1 || conflict.Names[0] != "host-alias.local." {
+		t.Fatal("owner loss lost conflict reply", err)
 	}
 }
