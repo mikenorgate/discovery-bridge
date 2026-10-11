@@ -363,7 +363,7 @@ The [compatibility contract](docs/CONTRACT.md) specifies these rules.
 
 ## Build and contribute
 
-Source builds use **Go 1.27.1**, pinned in `go.mod`, `.go-version` and CI:
+Source builds use **Go 1.27.2**, pinned in `go.mod`, `.go-version` and CI:
 
 ```sh
 make test

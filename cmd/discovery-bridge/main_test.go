@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestCLI(t *testing.T) {
 		code     int
 		contains string
 	}{
-		{"version", []string{"version"}, 0, "go1.27.1"},
+		{"version", []string{"version"}, 0, runtime.Version()},
 		{"localized registry", []string{"registry", "describe", "--locale", "de", "_http._tcp"}, 0, "Web-Angebot"},
 		{"unknown observed type", []string{"registry", "describe", "_private_thing._udp"}, 0, "_private_thing._udp"},
 		{"invalid type", []string{"registry", "describe", "_http._sctp"}, 2, ""},

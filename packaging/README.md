@@ -1,6 +1,6 @@
 # Packages and router support
 
-Build native artifacts with Go 1.27.1 and `dpkg-deb`:
+Build native artifacts with Go 1.27.2 and `dpkg-deb`:
 
 ```sh
 make artifacts VERSION=0.1.1
