@@ -20,13 +20,14 @@ type Interface struct {
 
 // CurrentInterface captures an up multicast interface in the caller's namespace.
 // Router processes use it directly; broker admission uses Namespace.Inspect.
-func CurrentInterface(name string) (Interface, error) { return inspectInterface(name) }
+// Deprecated secondary addresses are excluded from router socket selection.
+func CurrentInterface(name string) (Interface, error) { return inspectInterface(name, true) }
 
 // Inspect verifies direct Linux interface state against the API/CRI addresses.
 func (n *Namespace) Inspect(name string, expected []netip.Addr) (result Interface, err error) {
 	err = n.With(func() error {
 		var err error
-		result, err = inspectInterface(name)
+		result, err = inspectInterface(name, false)
 		if err != nil {
 			return err
 		}
@@ -46,7 +47,7 @@ func (n *Namespace) Inspect(name string, expected []netip.Addr) (result Interfac
 	return result, err
 }
 
-func inspectInterface(name string) (result Interface, err error) {
+func inspectInterface(name string, skipDeprecated bool) (result Interface, err error) {
 	request, err := unix.NewIfreq(name)
 	if err != nil {
 		return result, err
@@ -145,7 +146,16 @@ func inspectInterface(name string) (result Interface, err error) {
 				primary = local
 			}
 			address, ok := netip.AddrFromSlice(primary)
-			if !ok || flags&(unix.IFA_F_TENTATIVE|unix.IFA_F_DADFAILED|unix.IFA_F_DEPRECATED) != 0 || address.IsUnspecified() || address.IsLoopback() || address.IsMulticast() || address.Is4In6() {
+			unready := flags&(unix.IFA_F_TENTATIVE|unix.IFA_F_DADFAILED) != 0
+			invalid := !ok || address.IsUnspecified() || address.IsLoopback() ||
+				address.IsMulticast() || address.Is4In6()
+			if invalid || unready {
+				return result, errors.New("pod interface address is not ready")
+			}
+			if flags&unix.IFA_F_DEPRECATED != 0 {
+				if skipDeprecated {
+					continue
+				}
 				return result, errors.New("pod interface address is not ready")
 			}
 			result.Addresses = append(result.Addresses, address)

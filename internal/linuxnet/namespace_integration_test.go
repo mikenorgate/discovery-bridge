@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -66,6 +67,40 @@ func TestNamespaceSocketsAndRestoration(t *testing.T) {
 	if _, err := ns.Inspect("dummy0", []netip.Addr{netip.MustParseAddr("2001:db8:1::43")}); err == nil {
 		t.Fatal("accepted API/interface address mismatch")
 	}
+	t.Run("router ignores unrelated deprecated address but pod admission stays strict", func(t *testing.T) {
+		command := exec.CommandContext(ctx, "nsenter", "--target", strconv.Itoa(child.Process.Pid), "--net", "ip")
+		command.Args = append(command.Args, "address", "add", "2001:db8:2::99/64", "dev", "dummy0", "nodad", "preferred_lft", "0")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("deprecated address setup: %v: %s", err, output)
+		}
+		t.Cleanup(func() {
+			command := exec.CommandContext(ctx, "nsenter", "--target", strconv.Itoa(child.Process.Pid), "--net", "ip")
+			command.Args = append(command.Args, "address", "del", "2001:db8:2::99/64", "dev", "dummy0")
+			if output, err := command.CombinedOutput(); err != nil {
+				t.Errorf("deprecated address cleanup: %v: %s", err, output)
+			}
+		})
+		if err := ns.With(func() error {
+			actual, err := linuxnet.CurrentInterface("dummy0")
+			if err != nil {
+				return err
+			}
+			if !slices.Equal(actual.Addresses, details.Addresses) {
+				t.Errorf("router addresses = %v, want %v", actual.Addresses, details.Addresses)
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("router lost healthy interface to deprecated secondary address: %v", err)
+		}
+		for _, expected := range [][]netip.Addr{
+			{netip.MustParseAddr("192.0.2.42"), netip.MustParseAddr("2001:db8:1::42")},
+			{netip.MustParseAddr("192.0.2.42"), netip.MustParseAddr("2001:db8:1::42"), netip.MustParseAddr("2001:db8:2::99")},
+		} {
+			if _, err := ns.Inspect("dummy0", expected); err == nil {
+				t.Fatalf("pod admission accepted deprecated address with expected set %v", expected)
+			}
+		}
+	})
 	before, err := os.Stat("/proc/self/ns/net")
 	if err != nil {
 		t.Fatal(err)
