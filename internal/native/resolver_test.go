@@ -35,7 +35,7 @@ func ingestFixture(t *testing.T, r *Resolver, source, text string) {
 		t.Fatal(err)
 	}
 	now := catalog.Now().Mono
-	if err := r.Ingest([]observation.Record{{Source: source, Generation: "generation", Family: 4, RR: rr}}, now, now); err != nil {
+	if err := r.Ingest([]observation.Record{{Source: source, Generation: "generation", Family: 4, RR: rr}}, now); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -62,6 +62,32 @@ func TestCachedAnswerDoesNotQueryAndPreservesSource(t *testing.T) {
 	}
 	if calls.Load() != 0 {
 		t.Fatal("cached answer caused multicast")
+	}
+}
+
+func TestQueryOvertakingQueuedIngestDoesNotInvalidateEpoch(t *testing.T) {
+	r := fixtureResolver(t, func(context.Context, Question) (func() error, error) {
+		return nil, errors.New("cached answers must not start multicast")
+	})
+	ingestFixture(t, r, "alpha", "existing.local. 120 IN A 192.0.2.10")
+	received := catalog.Now().Mono
+	question := Question{Source: "alpha", DNS: dns.Question{Name: "existing.local.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
+	if _, err := r.Query(t.Context(), question); err != nil {
+		t.Fatal(err)
+	}
+	// The caller sampled time before a query obtained the cache lock. This is
+	// normal scheduling, not a backwards jump of the monotonic clock.
+	rr, err := dns.NewRR("queued.local. 10 IN A 192.0.2.11")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Ingest([]observation.Record{{Source: "alpha", Generation: "generation", Family: 4, RR: rr}}, received); err != nil {
+		t.Fatal("queued ingest invalidated a healthy epoch:", err)
+	}
+	question.DNS.Name = "queued.local."
+	result, err := r.Query(t.Context(), question)
+	if err != nil || len(result.Records) != 1 || result.Records[0].Header().Ttl > 10 {
+		t.Fatalf("queued observation lost or lifetime extended: %+v %v", result, err)
 	}
 }
 

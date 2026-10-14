@@ -101,9 +101,12 @@ func (r *Resolver) Close() {
 }
 
 // Ingest accepts only already validated wire observations from this epoch.
-func (r *Resolver) Ingest(records []observation.Record, received, now time.Duration) error {
+func (r *Resolver) Ingest(records []observation.Record, received time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// Sample processing time under the cache lock: concurrent queries can
+	// otherwise advance its clock past a timestamp sampled by the caller.
+	now := catalog.Now().Mono
 	if r.isClosed {
 		return ErrUnavailable
 	}

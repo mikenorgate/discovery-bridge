@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,7 +113,11 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
 	front, private, recursive := freePort(t), freePort(t), freePort(t)
 	settings := testSettings()
 	settings.Listeners = []config.Endpoint{{Host: "127.0.0.1", Port: front}}
+	var afterMetadataQueries atomic.Int64
 	h := testHandler(t, settings, func(ctx context.Context, question native.Question) (native.Result, error) {
+		if question.DNS.Name == "after-metadata.local." {
+			afterMetadataQueries.Add(1)
+		}
 		if os.Getenv("DISCOVERY_DNS_TEST_TRACE") == "1" {
 			t.Logf("native query %s %s at %s", question.DNS.Name, dns.TypeToString[question.DNS.Qtype], time.Now().Format(time.RFC3339Nano))
 		}
@@ -164,6 +169,8 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
  cache-min-ttl: 0
  serve-expired: no
  tcp-auth-query-timeout: %d
+ infra-cache-min-rtt: 500
+ tcp-reuse-timeout: 30000
  discard-timeout: 30000
  local-zone: "alpha.devices.example.test." transparent
  local-zone: "2.0.192.in-addr.arpa." transparent
@@ -226,6 +233,21 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
 			if len(reply.Answer) != 0 || len(reply.Ns) != 1 || time.Since(began) < 5*time.Second {
 				t.Fatal("cold absence was not preserved", reply)
 			}
+		}
+	})
+	t.Run("cold after fast metadata", func(t *testing.T) {
+		exchange(t, private, "alpha.devices.example.test.", dns.TypeSOA)
+		exchange(t, recursive, "alpha.devices.example.test.", dns.TypeSOA)
+		// Exercise a normal reconnect with the metadata RTT still cached.
+		// Real Unbound owns this idle timer, so virtual test time cannot advance it.
+		time.Sleep(31 * time.Second)
+		began := time.Now()
+		reply := exchange(t, recursive, "after-metadata.alpha.devices.example.test.", dns.TypeA)
+		if len(reply.Answer) != 0 || len(reply.Ns) != 1 || time.Since(began) < 5*time.Second {
+			t.Fatal("fast metadata shortened the cold-query budget", reply)
+		}
+		if got := afterMetadataQueries.Load(); got != 1 {
+			t.Fatalf("cold lookup retried before its query budget: got %d native queries, want 1", got)
 		}
 	})
 	t.Run("existing coredns forward cold replies", func(t *testing.T) {

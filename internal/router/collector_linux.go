@@ -331,7 +331,7 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 			request.reply <- c.browseDemand(request.ctx, browser, t, request.question)
 		case event := <-events:
 			if epoch.native != nil && len(event.native) > 0 {
-				if err := epoch.native.Ingest(event.native, event.now.Mono, catalog.Now().Mono); err != nil {
+				if err := epoch.native.Ingest(event.native, event.now.Mono); err != nil {
 					return err
 				}
 			}
