@@ -57,6 +57,7 @@ jobs:
           go test -race -tags integration -count=1 ./internal/native ./internal/discoverydns
           make artifacts VERSION="$RELEASE_VERSION" ARCH=${{ matrix.arch }}
           dist/native/${{ matrix.arch }}/discovery-bridge version
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -mode=binary dist/native/${{ matrix.arch }}/discovery-bridge
       - name: Isolated namespace integration
         run: |
           sudo apt-get update -qq
