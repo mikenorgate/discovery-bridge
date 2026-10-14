@@ -15,6 +15,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
+	"github.com/mikenorgate/discovery-bridge/internal/dnswire"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
@@ -288,6 +289,20 @@ func (s *Sender) Questions(ctx context.Context, name string, types []uint16) err
 	wire, err := message.Pack()
 	if err != nil || len(wire) > 1232 {
 		return errors.New("fresh question packet exceeds budget")
+	}
+	return s.send(ctx, wire)
+}
+
+// NativeQuestion sends one source-admitted DNS question, including genuine ANY
+// and reverse questions. Callers must validate the name against the link policy.
+func (s *Sender) NativeQuestion(ctx context.Context, question dns.Question, prefixes []netip.Prefix) error {
+	if !dnswire.LocalOrReverse(question.Name, prefixes) || question.Qclass != dns.ClassINET || question.Qtype == 0 {
+		return errors.New("invalid source-bound native question")
+	}
+	message := &dns.Msg{Question: []dns.Question{question}}
+	wire, err := message.Pack()
+	if err != nil || len(wire) > 1232 {
+		return errors.New("native question packet exceeds budget")
 	}
 	return s.send(ctx, wire)
 }

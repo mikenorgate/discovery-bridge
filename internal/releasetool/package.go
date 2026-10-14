@@ -38,10 +38,12 @@ type buildMetadata struct {
 var supportFiles = map[string]string{
 	"systemd/discovery-bridge-collector.service": "usr/lib/systemd/system/discovery-bridge-collector.service",
 	"systemd/discovery-bridge-publisher.service": "usr/lib/systemd/system/discovery-bridge-publisher.service",
+	"systemd/discovery-bridge-dns.service":       "usr/lib/systemd/system/discovery-bridge-dns.service",
 	"sysusers/discovery-bridge.conf":             "usr/lib/sysusers.d/discovery-bridge.conf",
 	"tmpfiles/discovery-bridge.conf":             "usr/lib/tmpfiles.d/discovery-bridge.conf",
 	"dbus/org.discovery-bridge.conf":             "usr/share/dbus-1/system.d/org.discovery-bridge.conf",
 	"examples/router.disabled.json":              "usr/share/doc/discovery-bridge/examples/router.disabled.json",
+	"examples/dns.json":                          "usr/share/doc/discovery-bridge/examples/dns.json",
 	"README.md":                                  "usr/share/doc/discovery-bridge/INSTALL.md",
 }
 
@@ -180,7 +182,8 @@ func (t tool) compile() error {
 	metadata := buildMetadata{Schema: 1, Version: t.settings.version, Architecture: t.settings.arch,
 		Source: source, Dirty: status != "", Epoch: epoch, GoVersion: pinned, Binary: digest,
 		Compatibility: map[string]any{"catalog_schema": 1, "snapshot_schemas": []int{1, 2},
-			"sqlite_schema": "identities-reservations-gateway_generation"}, Modules: []module{}}
+			"sqlite_schema":        "identities-reservations-gateway_generation",
+			"discovery_dns_schema": 1, "native_query_schema": 1}, Modules: []module{}}
 	for _, m := range modules {
 		metadata.Modules = append(metadata.Modules, m)
 	}
@@ -205,9 +208,10 @@ func (t tool) compile() error {
 func (t tool) payload() (map[string]string, error) {
 	native := t.path("dist", "native", t.settings.arch)
 	files := map[string]string{
-		"usr/bin/discovery-bridge":                   filepath.Join(native, "discovery-bridge"),
-		"usr/share/doc/discovery-bridge/build.json":  filepath.Join(native, "build.json"),
-		"usr/share/doc/discovery-bridge/CONTRACT.md": t.path("docs", "CONTRACT.md"),
+		"usr/bin/discovery-bridge":                        filepath.Join(native, "discovery-bridge"),
+		"usr/share/doc/discovery-bridge/build.json":       filepath.Join(native, "build.json"),
+		"usr/share/doc/discovery-bridge/CONTRACT.md":      t.path("docs", "CONTRACT.md"),
+		"usr/share/doc/discovery-bridge/DISCOVERY_DNS.md": t.path("docs", "DISCOVERY_DNS.md"),
 	}
 	for source, target := range supportFiles {
 		files[target] = t.path("packaging", source)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
+	"github.com/mikenorgate/discovery-bridge/internal/dnswire"
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
 )
 
@@ -25,6 +26,13 @@ func localName(name string) (string, error) {
 func avahiName(name string) (string, error) {
 	if !catalog.LocalName(dns.Fqdn(name)) {
 		return "", errors.New("avahi names must be within .local")
+	}
+	return nativeAvahiName(name)
+}
+
+func nativeAvahiName(name string) (string, error) {
+	if !dnswire.Name(dns.Fqdn(name)) {
+		return "", errors.New("absolute avahi name required")
 	}
 	wire := make([]byte, 256)
 	n, err := dns.PackDomainName(dns.Fqdn(name), wire, 0, nil, false)

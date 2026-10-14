@@ -53,3 +53,30 @@ func TestRouterRejectsImplicitTopologyAndPublicationAuthority(t *testing.T) {
 		t.Fatal("duplicate authority field accepted")
 	}
 }
+
+func TestNativeListenerRequiresSeparateReadOnlyAuthority(t *testing.T) {
+	t.Parallel()
+	valid := func() Router {
+		r := routerFixture()
+		r.Native = &NativeListener{Socket: "/run/discovery-bridge-native/query.sock", User: "discovery-dns", Sources: []string{"lan-a"}}
+		return r
+	}
+	if err := valid().Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []func(*Router){
+		func(r *Router) { r.Native.User = "root" },
+		func(r *Router) { r.Native.User = r.ProducerUser },
+		func(r *Router) { r.Native.Socket = r.PublisherSocket },
+		func(r *Router) { r.Native.Socket = "relative.sock" },
+		func(r *Router) { r.Native.Sources = nil },
+		func(r *Router) { r.Native.Sources = []string{"lan-a", "lan-a"} },
+		func(r *Router) { r.Native.Sources = []string{"unselected"} },
+	} {
+		r := valid()
+		change(&r)
+		if err := r.Validate(); err == nil {
+			t.Fatal("unsafe native listener accepted")
+		}
+	}
+}

@@ -1,0 +1,34 @@
+[Unit]
+Description=Discovery Bridge authoritative discovery DNS
+After=discovery-bridge-collector.service
+Wants=discovery-bridge-collector.service
+ConditionPathExists=/etc/discovery-bridge/dns.json
+
+[Service]
+Type=simple
+User=discovery-bridge-dns
+Group=discovery-bridge-dns
+UMask=0077
+Environment=GOMAXPROCS=2
+ExecStartPre=/usr/bin/discovery-bridge dns-proxy --config /etc/discovery-bridge/dns.json --check
+ExecStart=/usr/bin/discovery-bridge dns-proxy --config /etc/discovery-bridge/dns.json
+Restart=on-failure
+RestartSec=1s
+TimeoutStopSec=10s
+NoNewPrivileges=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=128M
+TasksMax=32
+LimitNOFILE=512
+
+[Install]
+WantedBy=multi-user.target

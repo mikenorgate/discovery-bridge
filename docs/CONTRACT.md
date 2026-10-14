@@ -33,6 +33,12 @@ remain available when translation is unavailable.
 
 ## Feed and publication
 
+Optional discovery DNS and its separate read-only native query protocol use
+schema 1. These are advertised as `discovery_dns_schema` and
+`native_query_schema` in release compatibility metadata. Neither changes the
+leased pod catalog, publication protocol or persistent SQLite schema.
+See [Discovery DNS](DISCOVERY_DNS.md) for authority, expiry and deployment scope.
+
 HTTP catalog envelopes use schema 1 with `generation`, `policy_revision`,
 `nonce`, `unique_rrsets` and `snapshot`. Snapshots carry `epoch`, `revision`,
 `issued_at`, `valid_until` and `records`; snapshot schema 2 supports translated

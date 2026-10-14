@@ -51,6 +51,13 @@ type Bootstrap struct {
 	Type string `json:"type"`
 }
 
+// NativeListener admits one independent DNS frontend account to selected links.
+type NativeListener struct {
+	Socket  string   `json:"socket"`
+	User    string   `json:"user"`
+	Sources []string `json:"sources"`
+}
+
 // Router contains operator-owned topology, paths and local producer authority.
 // Translator readiness and Service publication have separate explicit settings.
 type Router struct {
@@ -67,6 +74,7 @@ type Router struct {
 	Bootstrap       []Bootstrap          `json:"bootstrap,omitempty"`
 	Translators     *Translators         `json:"translators,omitempty"`
 	Publication     *PublicationListener `json:"publication,omitempty"`
+	Native          *NativeListener      `json:"native,omitempty"`
 }
 
 var (
@@ -144,6 +152,25 @@ func (r Router) Validate() error {
 	if r.Gateway != nil {
 		if _, err := r.Gateway.Prefixes(); err != nil {
 			return err
+		}
+	}
+	if r.Native != nil {
+		n := r.Native
+		if !filepath.IsAbs(n.Socket) || filepath.Clean(n.Socket) != n.Socket || len(n.Socket) > 107 {
+			return errors.New("absolute native socket path required")
+		}
+		if n.Socket == r.BusSocket || n.Socket == r.PublisherSocket || n.Socket == r.State || !account.MatchString(n.User) || n.User == "root" || n.User == r.ProducerUser {
+			return errors.New("distinct read-only native endpoint and account required")
+		}
+		if len(n.Sources) == 0 || len(n.Sources) > len(sources) {
+			return errors.New("explicit native sources required")
+		}
+		seen := make(map[string]bool)
+		for _, source := range n.Sources {
+			if !sources[source] || seen[source] {
+				return errors.New("native source must select a distinct admitted link")
+			}
+			seen[source] = true
 		}
 	}
 	_, err := r.Policy()

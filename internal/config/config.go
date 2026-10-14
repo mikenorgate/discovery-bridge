@@ -18,6 +18,9 @@ import (
 
 const MaxBytes = 65536
 
+// Read loads one normalized operator-owned configuration with a fixed byte bound.
+func Read(path string) ([]byte, error) { return read(path) }
+
 // Endpoint is a numeric operator-selected HTTP endpoint.
 type Endpoint struct {
 	Host string `json:"host"`

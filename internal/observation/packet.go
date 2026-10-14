@@ -34,7 +34,7 @@ func Supported(kind uint16) bool {
 
 // Parse admits scoped authoritative responses and excludes the bridge's exports.
 // Hints and wire records are correlated separately by Cache.
-func Parse(packet Packet, links map[int]Link, scopes *policy.SourcePolicy, local map[int][]netip.Addr, owns func(string) (bool, error)) ([]Record, error) {
+func decodePacket(packet Packet, links map[int]Link, scopes *policy.SourcePolicy, local map[int][]netip.Addr) (*dns.Msg, error) {
 	link, ok := links[packet.Interface]
 	if !ok || packet.Interface < 1 || link.Source == "" || link.Generation == "" || packet.Generation != link.Generation || !slices.Contains(link.Families, packet.Family) || scopes == nil || (packet.Family != 4 && packet.Family != 6) {
 		return nil, errors.New("unapproved LAN interface generation or family")
@@ -74,6 +74,16 @@ func Parse(packet Packet, links map[int]Link, scopes *policy.SourcePolicy, local
 	if !message.Response || !message.Authoritative || flags&(0x7800|0x0200|0x000f) != 0 {
 		return nil, errors.New("complete authoritative mDNS response required")
 	}
+	return message, nil
+}
+
+// Parse admits only the existing Pod catalog projection of validated LAN data.
+func Parse(packet Packet, links map[int]Link, scopes *policy.SourcePolicy, local map[int][]netip.Addr, owns func(string) (bool, error)) ([]Record, error) {
+	message, err := decodePacket(packet, links, scopes, local)
+	if err != nil || message == nil {
+		return nil, err
+	}
+	link := links[packet.Interface]
 	reserved := func(name string) (bool, error) {
 		if owns == nil {
 			return false, nil
@@ -124,6 +134,71 @@ func Parse(packet Packet, links map[int]Link, scopes *policy.SourcePolicy, local
 		flush := h.Class&0x8000 != 0 && h.Rrtype != dns.TypePTR
 		h.Class = dns.ClassINET
 		result = append(result, Record{Source: link.Source, Generation: link.Generation, Family: packet.Family, RR: rr, Flush: flush})
+	}
+	return result, nil
+}
+
+// ParseNative retains native records, including reverse and denial data, without
+// broadening the existing Pod catalog or accepting another link's addresses.
+func ParseNative(packet Packet, links map[int]Link, scopes *policy.SourcePolicy, local map[int][]netip.Addr, owns func(string) (bool, error)) ([]Record, error) {
+	message, err := decodePacket(packet, links, scopes, local)
+	if err != nil || message == nil {
+		return nil, err
+	}
+	link := links[packet.Interface]
+	prefixes := scopes.Sources()[link.Source]
+	result := make([]Record, 0, len(message.Answer)+len(message.Ns)+len(message.Extra))
+	for _, records := range [][]dns.RR{message.Answer, message.Ns, message.Extra} {
+		for _, rr := range records {
+			header := rr.Header()
+			if header.Class&0x7fff != dns.ClassINET || !dnswire.LocalOrReverse(header.Name, prefixes) {
+				continue
+			}
+			if owns != nil {
+				owned, err := owns(header.Name)
+				if err != nil {
+					return nil, err
+				}
+				if owned {
+					continue
+				}
+			}
+			reserved := false
+			for _, field := range dnswire.NameFields(rr) {
+				if !dnswire.Name(*field) {
+					reserved = true
+					break
+				}
+				if owns != nil && dns.IsSubDomain("local.", *field) {
+					owned, err := owns(*field)
+					if err != nil {
+						return nil, err
+					}
+					reserved = reserved || owned
+				}
+			}
+			if reserved {
+				continue
+			}
+			var address netip.Addr
+			switch value := rr.(type) {
+			case *dns.A:
+				address, _ = netip.AddrFromSlice(value.A)
+				address = address.Unmap()
+			case *dns.AAAA:
+				address, _ = netip.AddrFromSlice(value.AAAA)
+			}
+			if header.Rrtype == dns.TypeA || header.Rrtype == dns.TypeAAAA {
+				if scopes.CheckAddress(link.Source, address) != nil {
+					continue
+				}
+			}
+			flush := header.Class&0x8000 != 0 && header.Rrtype != dns.TypePTR
+			header.Class = dns.ClassINET
+			result = append(result, Record{
+				Source: link.Source, Generation: link.Generation, Family: packet.Family, RR: rr, Flush: flush,
+			})
+		}
 	}
 	return result, nil
 }

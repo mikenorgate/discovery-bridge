@@ -54,18 +54,20 @@ jobs:
         run: |
           go vet ./...
           go test -race -shuffle=on -count=1 ./...
+          go test -race -tags integration -count=1 ./internal/native ./internal/discoverydns
           make artifacts VERSION="$RELEASE_VERSION" ARCH=${{ matrix.arch }}
           dist/native/${{ matrix.arch }}/discovery-bridge version
       - name: Isolated namespace integration
         run: |
           sudo apt-get update -qq
-          sudo apt-get install --yes iproute2 util-linux dbus avahi-daemon ethtool
+          sudo apt-get install --yes iproute2 util-linux dbus avahi-daemon ethtool unbound
+          go test -race -tags integration -count=1 ./internal/discoverydns -run TestRealUnbound
           sudo env "PATH=$PATH" "GOMODCACHE=$(go env GOMODCACHE)" "GOCACHE=$(go env GOCACHE)" go test -race -tags integration -count=1 ./internal/linuxnet ./internal/node ./internal/avahi ./internal/observation ./internal/router ./internal/translation
       - name: Restricted container integration
         run: |
           docker build --tag discovery-bridge-integration --file tests/Containerfile.integration tests
           docker run --rm --network none --memory 192m --pids-limit 64 \
-            --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
+            --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add FSETID --cap-add DAC_OVERRIDE \
             --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \
             discovery-bridge-integration dist/release-tools check-install --root /source \
@@ -75,7 +77,7 @@ jobs:
             dist/releases/${{ matrix.arch }}
           docker run --rm --network none --read-only \
             --tmpfs /tmp:rw,nosuid,nodev,exec --memory 192m --pids-limit 64 \
-            --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE \
+            --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add FSETID --cap-add DAC_OVERRIDE \
             --security-opt no-new-privileges \
             --env DISCOVERY_BRIDGE_TEST_BINARY=/usr/bin/discovery-bridge \
             --volume "$GITHUB_WORKSPACE:/source:ro" --workdir /source \

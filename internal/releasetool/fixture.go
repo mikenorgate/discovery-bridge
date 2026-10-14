@@ -132,7 +132,7 @@ func (t tool) checkInstall() error {
 		if service.Description == "" {
 			return errors.New("installed registry description missing")
 		}
-		for _, path := range []string{"/etc/discovery-bridge/router.json", "/run/discovery-bridge/publisher.sock"} {
+		for _, path := range []string{"/etc/discovery-bridge/router.json", "/etc/discovery-bridge/dns.json", "/run/discovery-bridge/publisher.sock", "/run/discovery-bridge-native/query.sock"} {
 			if err := absent(path); err != nil {
 				return err
 			}
@@ -159,6 +159,9 @@ func (t tool) checkInstall() error {
 			if users[role][5] != "/nonexistent" || users[role][6] != "/usr/sbin/nologin" {
 				return errors.New("unexpected service account login")
 			}
+		}
+		if err := dnsAccount(users, nil); err != nil {
+			return err
 		}
 		uid, err := strconv.Atoi(users[roles[0]][2])
 		if err != nil {
@@ -230,6 +233,27 @@ func (t tool) checkSupport() error {
 	if err != nil {
 		return err
 	}
+	if err := dnsAccount(users, groups); err != nil {
+		return err
+	}
+	if len(shadow["discovery-bridge-dns"]) < 2 || !strings.HasPrefix(shadow["discovery-bridge-dns"][1], "!") {
+		return errors.New("DNS service account must be locked")
+	}
+	dnsGroup, err := strconv.Atoi(groups["discovery-bridge-dns"][2])
+	if err != nil {
+		return err
+	}
+	collectorUID, err := strconv.Atoi(users[roles[1]][2])
+	if err != nil {
+		return err
+	}
+	if err := fileMode(filepath.Join(directory, "run/discovery-bridge-native"), 0770, collectorUID, dnsGroup); err != nil {
+		return err
+	}
+	info, err := os.Stat(filepath.Join(directory, "run/discovery-bridge-native"))
+	if err != nil || info.Mode()&os.ModeSetgid == 0 {
+		return errors.New("native query directory must inherit the DNS-only group")
+	}
 	if len(users[roles[0]]) != 7 || len(users[roles[1]]) != 7 || users[roles[0]][2] == users[roles[1]][2] || len(groups["discovery-bridge"]) != 4 {
 		return errors.New("service accounts or shared group missing")
 	}
@@ -281,7 +305,7 @@ func (t tool) checkSupport() error {
 		return err
 	}
 	units := filepath.Join(directory, "usr/lib/systemd/system")
-	for _, role := range roles {
+	for _, role := range append(append([]string{}, roles...), "discovery-bridge-dns") {
 		if err := copyFile(t.path("packaging", "systemd", role+".service"), filepath.Join(units, role+".service"), 0644); err != nil {
 			return err
 		}
@@ -294,7 +318,7 @@ func (t tool) checkSupport() error {
 	if err := os.WriteFile(filepath.Join(units, "avahi-daemon.service"), []byte("[Unit]\nDescription=Fixture dependency\n[Service]\nExecStart=/usr/bin/discovery-bridge version\n"), 0644); err != nil {
 		return err
 	}
-	if _, err := t.command(nil, "systemd-analyze", "--root="+directory, "verify", roles[0]+".service", roles[1]+".service"); err != nil {
+	if _, err := t.command(nil, "systemd-analyze", "--root="+directory, "verify", roles[0]+".service", roles[1]+".service", "discovery-bridge-dns.service"); err != nil {
 		return err
 	}
 	var example struct {
@@ -305,6 +329,26 @@ func (t tool) checkSupport() error {
 		return err
 	}
 	return require(!example.Enabled && example.Producer == roles[1], "example must be disabled with the collector producer account")
+}
+
+func dnsAccount(users, groups map[string][]string) error {
+	const account = "discovery-bridge-dns"
+	dnsUser := users[account]
+	if len(dnsUser) != 7 || dnsUser[5] != "/nonexistent" || dnsUser[6] != "/usr/sbin/nologin" || dnsUser[2] == "0" {
+		return errors.New("unprivileged DNS-only account missing")
+	}
+	for _, role := range roles {
+		if len(users[role]) != 7 || users[role][2] == dnsUser[2] || users[role][3] == dnsUser[3] {
+			return errors.New("DNS account must be separate from publisher and collector")
+		}
+	}
+	if groups != nil {
+		if len(groups[account]) != 4 || groups[account][2] != dnsUser[3] ||
+			len(groups["discovery-bridge"]) != 4 || contains(strings.Split(groups["discovery-bridge"][3], ","), account) {
+			return errors.New("DNS account must not gain shared identity-state access")
+		}
+	}
+	return nil
 }
 
 func (t tool) properties(role string) (map[string]string, error) {

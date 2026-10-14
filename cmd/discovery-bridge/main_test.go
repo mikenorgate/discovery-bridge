@@ -22,6 +22,8 @@ func TestCLI(t *testing.T) {
 		{"missing command", nil, 2, ""},
 		{"publisher missing config", []string{"kubernetes-publisher"}, 2, ""},
 		{"publisher extra argument", []string{"kubernetes-publisher", "--config", "/etc/fixture.json", "extra"}, 2, ""},
+		{"dns missing config", []string{"dns-proxy"}, 2, ""},
+		{"dns extra argument", []string{"dns-proxy", "--config", "/etc/fixture.json", "extra"}, 2, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer

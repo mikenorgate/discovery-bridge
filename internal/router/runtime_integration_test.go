@@ -23,6 +23,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
 	"github.com/mikenorgate/discovery-bridge/internal/config"
+	"github.com/mikenorgate/discovery-bridge/internal/discoverydns"
 	"github.com/mikenorgate/discovery-bridge/internal/gateway"
 	"github.com/mikenorgate/discovery-bridge/internal/linuxnet"
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
@@ -78,6 +79,16 @@ func TestRouterRoleProcess(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := services.RunPublisher(ctx, settings, os.Stdout); err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+		return
+	}
+	if role == "dns-proxy" {
+		settings, err := discoverydns.Load(os.Getenv("DISCOVERY_BRIDGE_TEST_CONFIG"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := discoverydns.Run(ctx, settings); err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
 		return
@@ -358,6 +369,7 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 	}
 	settings := config.Router{Enabled: true, Interfaces: []config.LAN{{Interface: "lan0", Source: "lan-a", Families: []int{4, 6}}, {Interface: "lan1", Source: "lan-b", Families: []int{4, 6}}}, Sources: map[string][]string{"lan-a": {"192.0.2.0/24", "2001:db8:1::/64"}, "lan-b": {"198.51.100.0/24", "2001:db8:2::/64"}}, AliasPrefix: "bridge", BusSocket: bus, State: filepath.Join(dir, "identities.db"), PublisherSocket: filepath.Join(dir, "publisher.sock"), ProducerUser: "nobody", Gateway: &config.Listener{Endpoint: config.Endpoint{Host: "127.0.0.1", Port: 19443}, Clients: []string{"127.0.0.1/32"}}}
 	settings.Forbidden = []string{"2001:db8::/64"}
+	settings.Native = &config.NativeListener{Socket: filepath.Join(dir, "native.sock"), User: "www-data", Sources: []string{"lan-a", "lan-b"}}
 	settings.Sources["kubernetes"] = []string{"2001:db8:ff00::/60"}
 	settings.Publication = &config.PublicationListener{Listener: config.Listener{Endpoint: config.Endpoint{Host: "127.0.0.1", Port: 19444}, Clients: []string{"127.0.0.1/32"}}, Source: "kubernetes"}
 	write(settings.State, nil, 0660)
@@ -373,6 +385,20 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 		t.Fatal(err)
 	}
 	write(configPath, configData, 0644)
+	dnsPath := filepath.Join(dir, "dns.json")
+	dnsSettings := discoverydns.Config{Schema: 1, Enabled: true,
+		Listeners: []config.Endpoint{{Host: "127.0.0.1", Port: 19453}}, Clients: []string{"127.0.0.1/32"},
+		NativeSocket: settings.Native.Socket, CollectorUser: "nobody", Nameservers: []string{"ns.example.test."},
+		Mailbox: "hostmaster.example.test.", DefaultSource: "lan-a",
+		Links: []discoverydns.Link{
+			{Source: "lan-a", ServiceDomain: "alpha.devices.example.test.", HostDomain: "alpha.devices.example.test.", Prefixes: settings.Sources["lan-a"]},
+			{Source: "lan-b", ServiceDomain: "beta.devices.example.test.", HostDomain: "beta.devices.example.test.", Prefixes: settings.Sources["lan-b"]},
+		}}
+	dnsData, err := json.Marshal(dnsSettings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(dnsPath, dnsData, 0644)
 	producerConfig := filepath.Join(dir, "services.json")
 	producerSource := filepath.Join(dir, "api.json")
 	selected := config.Service{Namespace: "services", Name: "example", Port: "http", Type: "_http._tcp", Instance: "Example web", TXT: map[string]string{"path": "/"}, Subtypes: []string{"test"}}
@@ -403,6 +429,9 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 		caps := []uintptr{unix.CAP_NET_RAW}
 		if name == "kubernetes-publisher" {
 			path, caps = producerConfig, nil
+		}
+		if name == "dns-proxy" {
+			path, caps = dnsPath, nil
 		}
 		// Set this thread-local flag before exec so every Go runtime thread
 		// inherits the boundary, including when testing the fixture executable.
@@ -568,6 +597,39 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 		host := strings.TrimSuffix(record.Name, "._example._tcp.local.") + ".local."
 		if record.Type == "SRV" && record.Data != "0 0 8080 "+host {
 			t.Fatal("application hostname renamed", record)
+		}
+	}
+	if !burst {
+		frontend := role("dns-proxy", 33)
+		query := func(owner string, kind uint16) *dns.Msg {
+			t.Helper()
+			request := new(dns.Msg)
+			request.SetQuestion(owner, kind)
+			client := dns.Client{Net: "tcp", Timeout: 8 * time.Second}
+			for deadline := time.Now().Add(3 * time.Second); ; {
+				frontend.check(t)
+				reply, _, err := client.ExchangeContext(ctx, request, "127.0.0.1:19453")
+				if err == nil {
+					return reply
+				}
+				if time.Now().After(deadline) {
+					t.Fatal(err)
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+		reply := query("sensor-0.alpha.devices.example.test.", dns.TypeA)
+		if reply.Rcode != dns.RcodeSuccess || len(reply.Answer) != 1 {
+			t.Fatal("native wire cache not available through authenticated DNS frontend", reply)
+		}
+		// A cold reverse query exercises real Avahi RecordBrowser ownership,
+		// packet-query transmission and complete cleanup after the six-second miss.
+		reply = query("250.2.0.192.in-addr.arpa.", dns.TypePTR)
+		if reply.Rcode != dns.RcodeSuccess || len(reply.Answer) != 0 || len(reply.Ns) != 1 {
+			t.Fatal("real Avahi cold native query failed", reply)
+		}
+		if err := frontend.stop(); err != nil || frontend.err != nil {
+			t.Fatal("DNS frontend did not stop cleanly", err, frontend.err)
 		}
 	}
 	if burst {

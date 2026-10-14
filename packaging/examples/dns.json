@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "enabled": true,
+  "listeners": [{"host": "192.0.2.53", "port": 53}, {"host": "2001:db8:ff::53", "port": 53}],
+  "clients": ["192.0.2.0/24", "2001:db8:1::/64"],
+  "native_socket": "/run/discovery-bridge-native/query.sock",
+  "collector_user": "discovery-bridge-collector",
+  "nameservers": ["discovery-proxy.devices.example.test."],
+  "mailbox": "hostmaster.example.test.",
+  "default_source": "lan-a",
+  "links": [{
+    "source": "lan-a",
+    "service_domain": "alpha.devices.example.test.",
+    "host_domain": "alpha.devices.example.test.",
+    "prefixes": ["192.0.2.0/24", "2001:db8:1::/64"]
+  }]
+}

@@ -267,3 +267,30 @@ func (c *Cache) Records(now catalog.Moment) ([]catalog.Record, error) {
 
 // Counts reports bounded wire and hint counts without device identifiers.
 func (c *Cache) Counts() (wire, hints int) { return len(c.wire), len(c.hints) }
+
+// NativeRecords returns copied, expiring wire records without promoting Avahi
+// hints to authority. The caller still owns source and epoch admission.
+func (c *Cache) NativeRecords(now time.Duration) ([]Record, error) {
+	if err := c.clock(now); err != nil {
+		return nil, err
+	}
+	values := make(map[key]Record)
+	for identity, evidence := range c.wire {
+		ttl := (evidence.deadline - now) / time.Second
+		if ttl < 1 {
+			continue
+		}
+		record := evidence.record
+		record.RR = dns.Copy(record.RR)
+		record.RR.Header().Ttl = uint32(min(ttl, 86400))
+		identity = identity.withoutFamily()
+		if previous, ok := values[identity]; !ok || previous.RR.Header().Ttl > record.RR.Header().Ttl {
+			values[identity] = record
+		}
+	}
+	result := slices.Collect(maps.Values(values))
+	slices.SortFunc(result, func(a, b Record) int {
+		return strings.Compare(a.Source+"\x00"+(catalog.Answer{RR: a.RR}).Key(), b.Source+"\x00"+(catalog.Answer{RR: b.RR}).Key())
+	})
+	return result, nil
+}

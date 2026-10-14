@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net"
 	"net/netip"
+	"os/user"
 	"slices"
 	"strconv"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
 	"github.com/mikenorgate/discovery-bridge/internal/config"
 	"github.com/mikenorgate/discovery-bridge/internal/gateway"
+	"github.com/mikenorgate/discovery-bridge/internal/native"
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
 	"github.com/mikenorgate/discovery-bridge/internal/publication"
 	"github.com/mikenorgate/discovery-bridge/internal/responder"
@@ -36,6 +38,7 @@ type demand struct {
 type collectorEpoch struct {
 	done     <-chan struct{}
 	requests chan demand
+	native   *native.Resolver
 }
 
 // collector serializes observation mutation in the epoch's main loop. The gate
@@ -134,6 +137,7 @@ func (c *collector) browseDemand(ctx context.Context, b *avahi.Browser, t *topol
 type observationEvent struct {
 	hint     avahi.Event
 	wire     []observation.Record
+	native   []observation.Record
 	now      catalog.Moment
 	rejected string
 }
@@ -172,6 +176,32 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 		return err
 	}
 	defer browser.Close()
+	if c.settings.Native != nil {
+		sources := make(map[string][]netip.Prefix)
+		all := t.scopes.Sources()
+		generation := ""
+		for _, source := range c.settings.Native.Sources {
+			for _, prefix := range all[source] {
+				forbidden := slices.ContainsFunc(c.settings.Forbidden, func(raw string) bool {
+					return prefix.Overlaps(netip.MustParsePrefix(raw))
+				})
+				if !forbidden {
+					sources[source] = append(sources[source], prefix)
+				}
+			}
+		}
+		for _, link := range t.links {
+			generation = link.Generation
+			break
+		}
+		epoch.native, err = native.New(generation, sources, func(ctx context.Context, question native.Question) (func() error, error) {
+			return c.nativeInterest(ctx, browser, t, question)
+		})
+		if err != nil {
+			return err
+		}
+		defer epoch.native.Close()
+	}
 	producer, err := publication.Dial(stop, c.settings.PublisherSocket, boot)
 	if err != nil {
 		return err
@@ -183,6 +213,9 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 	var workers sync.WaitGroup
 	defer func() {
 		cancel(nil)
+		if epoch.native != nil {
+			epoch.native.Close()
+		}
 		_ = monitor.Close()
 		_ = t.close()
 		browser.Close()
@@ -240,10 +273,20 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 					report(err)
 					continue
 				}
-				if len(records) == 0 {
+				var nativeRecords []observation.Record
+				if epoch.native != nil {
+					nativeRecords, err = observation.ParseNative(packet, t.links, t.scopes, t.addresses, func(name string) (bool, error) {
+						return c.identities.Owns(stop, name)
+					})
+					if err != nil {
+						report(err)
+						continue
+					}
+				}
+				if len(records) == 0 && len(nativeRecords) == 0 {
 					continue // Invalid network data cannot renew evidence.
 				}
-				if !send(observationEvent{wire: records, now: observed}) {
+				if !send(observationEvent{wire: records, native: nativeRecords, now: observed}) {
 					return
 				}
 			}
@@ -287,6 +330,11 @@ func (c *collector) collect(ctx context.Context, boot string, log *json.Encoder)
 		case request := <-epoch.requests:
 			request.reply <- c.browseDemand(request.ctx, browser, t, request.question)
 		case event := <-events:
+			if epoch.native != nil && len(event.native) > 0 {
+				if err := epoch.native.Ingest(event.native, event.now.Mono, catalog.Now().Mono); err != nil {
+					return err
+				}
+			}
 			if event.rejected != "" {
 				if err := log.Encode(map[string]string{"event": "packet_rejected", "reason": event.rejected}); err != nil {
 					return err
@@ -396,6 +444,22 @@ func RunCollector(ctx context.Context, settings config.Router, output io.Writer)
 	defer func() { cancel(nil); servers.Wait() }()
 	if c.translator != nil {
 		servers.Go(func() { c.translator.Run(stop) })
+	}
+	if settings.Native != nil {
+		account, err := user.Lookup(settings.Native.User)
+		if err != nil {
+			return err
+		}
+		uid, err := strconv.ParseUint(account.Uid, 10, 32)
+		if err != nil || uid == 0 || uid == uint64(^uint32(0)) {
+			return errors.New("unprivileged native frontend account required")
+		}
+		listener, lock, err := localListener(settings.Native.Socket)
+		if err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, lock.Close()) }()
+		servers.Go(func() { cancel(native.Serve(stop, listener, uint32(uid), c)) })
 	}
 	if settings.Publication != nil {
 		scopes, err := settings.Policy()

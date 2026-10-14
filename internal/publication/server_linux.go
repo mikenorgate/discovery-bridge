@@ -11,6 +11,7 @@ import (
 
 	"github.com/mikenorgate/discovery-bridge/internal/avahi"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
+	"github.com/mikenorgate/discovery-bridge/internal/jsonwire"
 	"golang.org/x/sys/unix"
 )
 
@@ -115,20 +116,7 @@ func (s *Server) Serve(ctx context.Context, listener *net.UnixListener) error {
 }
 
 func frameLine(reader *bufio.Reader) ([]byte, error) {
-	var result []byte
-	for {
-		part, err := reader.ReadSlice('\n')
-		if len(result)+len(part) > MaxFrame {
-			return nil, errors.New("local publication frame byte limit")
-		}
-		result = append(result, part...)
-		if err == nil {
-			return result, nil
-		}
-		if !errors.Is(err, bufio.ErrBufferFull) {
-			return nil, err
-		}
-	}
+	return jsonwire.ReadLine(reader, MaxFrame)
 }
 
 func (s *Server) client(ctx context.Context, connection *net.UnixConn) {

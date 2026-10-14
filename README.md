@@ -41,11 +41,16 @@ flowchart LR
 | `broker` | One DaemonSet pod per Linux node | Admit client pods and manage their responders |
 | Responder | One unprivileged worker in each broker container | Answer through sockets opened in admitted pod namespaces |
 | `kubernetes-publisher` | One Deployment replica | Read selected Services and EndpointSlices and send leased intents |
+| `dns-proxy` | Optional unprivileged router service | Present link-qualified mDNS names through ordinary authoritative DNS |
 
 The collector and router publisher use separate locked accounts and a local
 Unix socket. The broker starts its shared worker with UID/GID 65532 and no capabilities.
 Run the Service publisher when you need Kubernetes Services advertised. A router
 deployment can omit the pod gateway for LAN-only use.
+
+Applications without mDNS can use the optional [Discovery DNS](docs/DISCOVERY_DNS.md)
+frontend with a recursive resolver such as Unbound. It preserves native records;
+DNS64 and application access policy remain the resolver's and firewall's jobs.
 
 ## Install a release
 

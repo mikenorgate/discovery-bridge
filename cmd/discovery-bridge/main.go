@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/mikenorgate/discovery-bridge/internal/config"
+	"github.com/mikenorgate/discovery-bridge/internal/discoverydns"
 	"github.com/mikenorgate/discovery-bridge/internal/node"
 	"github.com/mikenorgate/discovery-bridge/internal/registry"
 	"github.com/mikenorgate/discovery-bridge/internal/router"
@@ -24,6 +25,11 @@ import (
 var version = "development"
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "dns-proxy" {
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+		return runDNS(ctx, args[1:], stderr)
+	}
 	if len(args) > 0 && args[0] == "kubernetes-publisher" {
 		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
@@ -46,7 +52,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) < 2 || args[0] != "registry" || args[1] != "describe" {
-		if _, err := fmt.Fprintln(stderr, "usage: discovery-bridge version | registry describe [--locale language] _service._tcp | broker --config path [--node name] | collector --config path | publisher --config path | kubernetes-publisher --config path"); err != nil {
+		if _, err := fmt.Fprintln(stderr, "usage: discovery-bridge version | registry describe [--locale language] _service._tcp | broker --config path [--node name] | collector --config path | publisher --config path | kubernetes-publisher --config path | dns-proxy --config path"); err != nil {
 			return 1
 		}
 		return 2
@@ -78,6 +84,27 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runDNS(ctx context.Context, args []string, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dns-proxy", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	path := flags.String("config", "", "absolute authoritative DNS configuration path")
+	check := flags.Bool("check", false, "validate configuration without opening listeners")
+	if flags.Parse(args) != nil || flags.NArg() != 0 || *path == "" {
+		return 2
+	}
+	settings, err := discoverydns.Load(*path)
+	if err == nil && !*check {
+		err = discoverydns.Run(ctx, settings)
+	}
+	if err == nil || errors.Is(err, context.Canceled) {
+		return 0
+	}
+	if _, writeErr := fmt.Fprintln(stderr, "discovery dns stopped:", err); writeErr != nil {
+		return 1
+	}
+	return 1
 }
 
 func runServices(ctx context.Context, args []string, stdout, stderr io.Writer) int {

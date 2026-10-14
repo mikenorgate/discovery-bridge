@@ -14,6 +14,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/miekg/dns"
 	"github.com/mikenorgate/discovery-bridge/internal/catalog"
+	"github.com/mikenorgate/discovery-bridge/internal/dnswire"
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
 )
 
@@ -50,6 +51,7 @@ type Browser struct {
 	seen       map[seenKey]dns.RR
 	touched    map[Query]time.Time
 	permanent  map[Query]bool
+	native     map[dbus.ObjectPath]bool
 	deferred   uint64
 }
 
@@ -77,7 +79,8 @@ func newBrowser(links map[int]observation.Link) (*Browser, error) {
 	}
 	return &Browser{epoch: hex.EncodeToString(token[:]), links: links,
 		paths: make(map[dbus.ObjectPath]Query), queries: make(map[Query]dbus.ObjectPath),
-		seen: make(map[seenKey]dns.RR), touched: make(map[Query]time.Time), permanent: make(map[Query]bool)}, nil
+		seen: make(map[seenKey]dns.RR), touched: make(map[Query]time.Time), permanent: make(map[Query]bool),
+		native: make(map[dbus.ObjectPath]bool)}, nil
 }
 
 func copyLinks(links map[int]observation.Link) (map[int]observation.Link, error) {
@@ -183,6 +186,77 @@ func (b *Browser) Watch(ctx context.Context, query Query) (bool, error) {
 		return false, err
 	}
 	return true, b.Err()
+}
+
+// WatchNative opens an independent short-lived force-multicast interest. Its
+// events are not promoted to Pod hints; native authority still requires wire TTLs.
+// Avahi cannot browse ANY keys, so that operation belongs to the raw sender.
+func (b *Browser) WatchNative(ctx context.Context, query Query) (func() error, error) {
+	link, ok := b.links[query.Interface]
+	if !ok || !slices.Contains(link.Families, query.Family) || !dnswire.Name(query.Name) || query.Type == 0 || query.Type == dns.TypeANY {
+		return nil, errors.New("unapproved native Avahi query")
+	}
+	b.operations.Lock()
+	defer b.operations.Unlock()
+	if err := b.Err(); err != nil {
+		return nil, err
+	}
+	b.mu.Lock()
+	full := len(b.paths)+len(b.native) >= 1024
+	b.mu.Unlock()
+	if full {
+		return nil, errors.New("native Avahi browser capacity exceeded")
+	}
+	name, err := nativeAvahiName(query.Name)
+	if err != nil {
+		return nil, err
+	}
+	protocol := int32(0)
+	if query.Family == 6 {
+		protocol = 1
+	}
+	var path dbus.ObjectPath
+	err = b.bus.call(ctx, "/", server2+".RecordBrowserPrepare", int32(query.Interface), protocol, name, uint16(dns.ClassINET), query.Type, uint32(2)).Store(&path)
+	if err != nil {
+		return nil, err
+	}
+	if !path.IsValid() || path == "/" {
+		return nil, errors.New("invalid native Avahi browser path")
+	}
+	b.mu.Lock()
+	_, catalogPath := b.paths[path]
+	reused := catalogPath || b.native[path]
+	if !reused {
+		b.native[path] = true
+	}
+	b.mu.Unlock()
+	if reused {
+		b.bus.fail(errors.New("avahi reused a native browser path"))
+		return nil, b.Err()
+	}
+	var once sync.Once
+	var closeErr error
+	cleanup := func() error {
+		once.Do(func() {
+			b.mu.Lock()
+			delete(b.native, path)
+			b.mu.Unlock()
+			if b.Err() != nil {
+				return
+			}
+			bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+			defer cancel()
+			closeErr = b.bus.call(bounded, path, browserInterface+".Free").Err
+			if closeErr != nil {
+				b.bus.fail(errors.New("native Avahi browser release failed"))
+			}
+		})
+		return closeErr
+	}
+	if err := b.bus.call(ctx, path, browserInterface+".Start").Err; err != nil {
+		return nil, errors.Join(err, cleanup())
+	}
+	return cleanup, nil
 }
 
 // Seed asks the standard DNS-SD enumeration question on every approved family.
@@ -303,6 +377,12 @@ func (b *Browser) Next(ctx context.Context) (Event, error) {
 }
 
 func (b *Browser) event(signal *dbus.Signal) (Event, bool, error) {
+	if b.native[signal.Path] {
+		if signal.Name == browserInterface+".Failure" {
+			return Event{}, false, errors.New("native avahi record browser failed")
+		}
+		return Event{}, false, nil
+	}
 	query, ok := b.paths[signal.Path]
 	if !ok || !strings.HasPrefix(signal.Name, browserInterface+".") {
 		return Event{}, false, nil
