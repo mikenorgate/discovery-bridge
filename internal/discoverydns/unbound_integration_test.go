@@ -114,9 +114,13 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
 	settings := testSettings()
 	settings.Listeners = []config.Endpoint{{Host: "127.0.0.1", Port: front}}
 	var afterMetadataQueries atomic.Int64
+	var structuralQueries atomic.Int64
 	h := testHandler(t, settings, func(ctx context.Context, question native.Question) (native.Result, error) {
 		if question.DNS.Name == "after-metadata.local." {
 			afterMetadataQueries.Add(1)
+		}
+		if question.DNS.Name == "_tcp.local." {
+			structuralQueries.Add(1)
 		}
 		if os.Getenv("DISCOVERY_DNS_TEST_TRACE") == "1" {
 			t.Logf("native query %s %s at %s", question.DNS.Name, dns.TypeToString[question.DNS.Qtype], time.Now().Format(time.RFC3339Nano))
@@ -129,6 +133,13 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
 			result.Records = testRRs(t, "dual.local. 120 IN A 192.0.2.11", "dual.local. 120 IN AAAA 2001:db8:1::11")
 		case "10.2.0.192.in-addr.arpa.":
 			result.Records = testRRs(t, "10.2.0.192.in-addr.arpa. 120 IN PTR v4.local.")
+		case "_http._tcp.local.":
+			result.Records = testRRs(t,
+				"_http._tcp.local. 120 IN PTR Lamp._http._tcp.local.",
+				"Lamp._http._tcp.local. 120 IN SRV 0 0 80 v4.local.",
+				"Lamp._http._tcp.local. 120 IN TXT \"path=/\"",
+				"v4.local. 120 IN A 192.0.2.10",
+			)
 		default:
 			timer := time.NewTimer(6 * time.Second)
 			defer timer.Stop()
@@ -157,6 +168,7 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
  port: %d
  username: ""
  chroot: ""
+ directory: ""
  pidfile: ""
  use-syslog: no
  do-daemonize: no
@@ -177,7 +189,7 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
  local-zone: "%s" transparent
  local-data: ". 10 IN NS ns.example.test."
 `
-	privateConfig := fmt.Sprintf(base, private, "fd00:64::/96", 8000, syntheticReverse)
+	privateConfig := fmt.Sprintf(base, private, "fd00:64::/96", 8000, syntheticReverse) + " qname-minimisation: no\n"
 	for _, zone := range []string{"alpha.devices.example.test.", "2.0.192.in-addr.arpa."} {
 		privateConfig += fmt.Sprintf("stub-zone:\n name: %q\n stub-addr: 127.0.0.1@%d\n stub-first: no\n stub-prime: no\n stub-tcp-upstream: yes\n", zone, front)
 	}
@@ -206,6 +218,15 @@ func TestRealUnboundDNS64AndColdCoreDNS(t *testing.T) {
 		}
 		return reply
 	}
+	t.Run("service discovery avoids structural address probes", func(t *testing.T) {
+		reply := exchange(t, recursive, "_http._tcp.alpha.devices.example.test.", dns.TypePTR)
+		if len(reply.Answer) != 1 || reply.Answer[0].Header().Rrtype != dns.TypePTR {
+			t.Fatal("service discovery did not return its PTR:", reply)
+		}
+		if got := structuralQueries.Load(); got != 0 {
+			t.Fatalf("service discovery generated %d unnecessary _tcp address lookups", got)
+		}
+	})
 	t.Run("dns64 and native ipv6", func(t *testing.T) {
 		for _, test := range []struct{ name, address string }{
 			{"v4", "fd00:64::c000:20a"}, {"dual", "2001:db8:1::11"},

@@ -31,16 +31,16 @@ func (h *Handler) admitted(address net.Addr) bool {
 	return false
 }
 
-func (h *Handler) serve(ctx context.Context, writer dns.ResponseWriter, request *dns.Msg) {
+func (h *Handler) response(ctx context.Context, remote net.Addr, network string, request *dns.Msg) *dns.Msg {
 	var reply *dns.Msg
-	if !h.admitted(writer.RemoteAddr()) {
+	if !h.admitted(remote) {
 		reply = new(dns.Msg)
 		reply.SetRcode(request, dns.RcodeRefused)
 	} else {
 		reply = h.Answer(ctx, request)
 	}
 	limit := 65535
-	if writer.LocalAddr().Network() == "udp" {
+	if network == "udp" {
 		limit = 512
 		if opt := request.IsEdns0(); opt != nil {
 			limit = max(512, min(int(opt.UDPSize()), 1232))
@@ -51,6 +51,11 @@ func (h *Handler) serve(ctx context.Context, writer dns.ResponseWriter, request 
 	}
 	reply.Compress = true
 	reply.Truncate(limit)
+	return reply
+}
+
+func (h *Handler) serve(ctx context.Context, writer dns.ResponseWriter, request *dns.Msg) {
+	reply := h.response(ctx, writer.RemoteAddr(), writer.LocalAddr().Network(), request)
 	// A disconnected DNS client has no persistent state to roll back.
 	_ = writer.WriteMsg(reply)
 }
@@ -58,6 +63,8 @@ func (h *Handler) serve(ctx context.Context, writer dns.ResponseWriter, request 
 // Serve owns listeners for both DNS transports and joins all servers on exit.
 func (h *Handler) Serve(ctx context.Context) error {
 	servers := make([]*dns.Server, 0, len(h.settings.Listeners)*2)
+	tcpListeners := make([]net.Listener, 0, len(h.settings.Listeners))
+	tcpConnections := make(chan struct{}, maxTCPConnections)
 	stop, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var workers sync.WaitGroup
@@ -72,6 +79,9 @@ func (h *Handler) Serve(ctx context.Context) error {
 			if server.PacketConn != nil {
 				_ = server.PacketConn.Close()
 			}
+		}
+		for _, listener := range tcpListeners {
+			_ = listener.Close() // Closing listeners releases the owned accept loops.
 		}
 		workers.Wait()
 	}()
@@ -102,7 +112,9 @@ func (h *Handler) Serve(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				server.Listener = listener
+				tcpListeners = append(tcpListeners, listener)
+				workers.Go(func() { failures <- h.serveTCP(stop, listener, tcpConnections) })
+				continue
 			}
 			servers = append(servers, server)
 			workers.Go(func() { failures <- server.ActivateAndServe() })

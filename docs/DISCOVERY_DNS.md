@@ -34,6 +34,20 @@ cannot answer first; a nonexistent `nodefault` child does not override its paren
 Keep private discovery zones outside public DNSSEC validation. Preserve any
 existing static reverse answers with more-specific resolver overrides.
 
+On a dedicated private resolver, disable QNAME minimisation for this path
+(`qname-minimisation: no` in Unbound). Otherwise a service lookup such as
+`_http._tcp.alpha.devices.example.test` can first trigger an address query for
+`_tcp.alpha.devices.example.test`, adding a six-second multicast miss before
+the requested service lookup. Keep QNAME minimisation enabled on the public
+recursive resolver; forward private zones to the dedicated instance.
+
+TCP queries on one connection run concurrently and replies may arrive out of
+order, matched by DNS message ID. A cold lookup does not delay a cached answer
+on that connection. The frontend accepts at most 64 TCP connections across all
+listeners and 16 in-flight requests per connection, closing each connection
+after 64 requests have completed. Excess requests receive SERVFAIL without
+entering a work queue. Disconnect and shutdown cancel pending lookups.
+
 ## Configuration
 
 Start with [dns.json](../packaging/examples/dns.json). Replace its documentation
@@ -92,8 +106,8 @@ updates, zone transfers and online DNSSEC signing are not implemented.
 | TTL and negative answers | Maximum ten seconds, no longer than supporting evidence; SOA minimum ten, serial zero and standard proxy timers |
 | Authority metadata | Complete apex NS/SOA; no multicast for administration or unsupported update/Push/LLQ discovery |
 | Type introspection | Native ANY for NSEC/NSEC3 requests; narrow generated intervals, never copied mDNS denial records |
-| DNS transports | UDP 512, EDNS up to 1232, TC truncation and complete TCP replies; real socket integration tests |
-| Resource bounds | 64 active queries, 16 native interests per source, bounded messages and dependency traversal; cancellation and race tests |
+| DNS transports | UDP 512, EDNS up to 1232, TC truncation and concurrent TCP replies; pipeline, disconnect and real socket integration tests |
+| Resource bounds | 64 active queries, 64 TCP connections, 16 in-flight requests per connection, 16 native interests per source, bounded messages and dependency traversal; cancellation and race tests |
 
 Apply a shared per-link multicast query limiter at the host firewall, including
 both address families while excluding responses. The deployment recommendation
