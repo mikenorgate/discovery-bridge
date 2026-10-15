@@ -518,8 +518,14 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 		}
 	})
 	devices, ttl := 1, uint32(12)
+	startupBudget := 15 * time.Second
 	if burst {
 		devices, ttl = 30, 120
+		// The race-instrumented ARM64 fixture opens hundreds of D-Bus
+		// browsers while collecting this burst. Keep requiring the complete
+		// graph, but do not impose the single-device startup budget on it.
+		// The separate lease, cancellation and wire-TTL bounds are unchanged.
+		startupBudget = 25 * time.Second
 	}
 	nativeRecords := 1 + devices*5
 	var packets [][]byte
@@ -580,7 +586,7 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 	var payload struct {
 		Snapshot catalog.Snapshot `json:"snapshot"`
 	}
-	for deadline := time.Now().Add(15 * time.Second); ; {
+	for deadline := time.Now().Add(startupBudget); ; {
 		collector.check(t)
 		publisher.check(t)
 		send()
