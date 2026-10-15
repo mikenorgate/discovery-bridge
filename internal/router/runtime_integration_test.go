@@ -902,6 +902,11 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 	}
 	// Even a stopped collector cannot hold publication past its last source
 	// lease. The independent owner closes and a fresh owner can recover.
+	data, err = os.ReadFile(collector.log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lossesBeforeStop := strings.Count(string(data), `"event":"discovery_epoch_lost"`)
 	if err := collector.command.Process.Signal(syscall.SIGSTOP); err != nil {
 		t.Fatal(err)
 	}
@@ -915,6 +920,24 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 	}
 	if err := collector.command.Process.Signal(syscall.SIGCONT); err != nil {
 		t.Fatal(err)
+	}
+	// A resumed collector can briefly still expose its old, complete feed.
+	// Observe withdrawal of that failed publication connection before testing
+	// recovery, so it cannot be mistaken for fresh state and then blamed on the
+	// unrelated loopback notification below.
+	for deadline := time.Now().Add(3 * time.Second); ; {
+		collector.check(t)
+		data, err = os.ReadFile(collector.log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Count(string(data), `"event":"discovery_epoch_lost"`) > lossesBeforeStop {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("resumed collector did not withdraw its failed publication epoch")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	publisher = role("publisher", 1)
 	for deadline := time.Now().Add(8 * time.Second); ; {
