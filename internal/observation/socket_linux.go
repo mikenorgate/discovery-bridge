@@ -24,7 +24,7 @@ import (
 // ErrPacketRejected denotes malformed traffic, rather than receiver failure.
 var ErrPacketRejected = errors.New("LAN packet rejected")
 
-func rawSocket(name string, index, family int) (_ *net.IPConn, err error) {
+func rawSocket(name string, index, family int, receive bool) (_ *net.IPConn, err error) {
 	iface, err := net.InterfaceByName(name)
 	if err != nil {
 		return nil, err
@@ -44,6 +44,22 @@ func rawSocket(name string, index, family int) (_ *net.IPConn, err error) {
 	defer func() { err = errors.Join(err, file.Close()) }()
 	if err := unix.SetsockoptString(fd, unix.SOL_SOCKET, unix.SO_BINDTODEVICE, name); err != nil {
 		return nil, err
+	}
+	if !receive {
+		// Raw UDP transmitters otherwise receive copies of incoming UDP too.
+		// Nobody reads them: each socket eventually wastes a full receive queue
+		// and reports misleading drops. A socket-local filter affects RX only;
+		// it neither changes the real receiver nor competes with Avahi's port.
+		filter := unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: 0}
+		program := unix.SockFprog{Len: 1, Filter: &filter}
+		if err := unix.SetsockoptSockFprog(
+			fd,
+			unix.SOL_SOCKET,
+			unix.SO_ATTACH_FILTER,
+			&program,
+		); err != nil {
+			return nil, err
+		}
 	}
 	if err := unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_RCVBUF, 256*1024); err != nil {
 		return nil, err
@@ -104,7 +120,12 @@ func OpenReceiver(name string, index int, generation string, family int, address
 	if err != nil {
 		return nil, err
 	}
-	conn, err := rawSocket(name, index, family)
+	conn, err := rawSocket(
+		name,
+		index,
+		family,
+		true,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +224,12 @@ func OpenSender(name string, index, family int, addresses []netip.Addr) (_ *Send
 	if err != nil {
 		return nil, err
 	}
-	conn, err := rawSocket(name, index, family)
+	conn, err := rawSocket(
+		name,
+		index,
+		family,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -55,13 +55,22 @@ of collector progress.
 LAN publication IPC remains newline-delimited JSON with `boot`, `sequence`,
 `issued` and complete `groups`. The Unix peer UID admits one local producer.
 Each group carries an approved interface/family, an absolute monotonic deadline
-and coherent records with persistent name ownership. Receiver cache TTL is one
-second. Disconnect, invalid replacement or an expired lease withdraws ownership.
+and coherent records with persistent name ownership. Groups with at least ten
+seconds of lease remaining use a five-second receiver cache TTL and withdraw
+their registration six seconds before the absolute evidence deadline. Avahi
+does not age its configured TTL when replying, so reserving that interval keeps
+the last reply's expiry within the evidence lease, even if its goodbye is lost.
+The additional second reserves time for supervisor and daemon scheduling.
+Shorter leases retain a one-second TTL. A TTL change replaces the registration;
+an unchanged renewal extends only its supervised deadline, without republishing.
+Disconnect, invalid replacement or an expired lease withdraws ownership.
 Run groups concurrently within the twelve-group bound; retain each group's
 ordered D-Bus calls. A stalled D-Bus writer cannot extend a publication lease.
 The collector and publisher capture their own topology generations. A link or
 address notification closes captured sockets and withdraws the old epoch before
-reopening. Reconnecting a collector requires fresh wire evidence even while
+reopening. Send-only raw sockets reject incoming packets before receive enqueue;
+the separate raw receivers still reassemble full IPv4/IPv6 UDP packets without
+binding Avahi's port. Reconnecting a collector requires fresh wire evidence even while
 Avahi retains its cache. The pod feed preserves original names as shared answers;
 LAN publication probes stable aliases and original hosts on their other links.
 

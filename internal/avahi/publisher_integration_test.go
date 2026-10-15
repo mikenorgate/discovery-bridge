@@ -22,6 +22,7 @@ type publicationFixture struct {
 	serial, active, peak, commits, resets, frees int
 	delay                                        time.Duration
 	paths                                        map[dbus.ObjectPath]bool
+	ttls                                         []uint32
 }
 
 func publisherFixture(t *testing.T, path string, delay time.Duration) *publicationFixture {
@@ -60,12 +61,15 @@ func (f *publicationFixture) newGroup() (dbus.ObjectPath, *dbus.Error) {
 	err := f.conn.ExportMethodTable(map[string]any{
 		"AddRecord": func(index, protocol int32, flags uint32, name string, class, kind uint16, ttl uint32, raw []byte) *dbus.Error {
 			defer f.wait()()
-			if index < 1 || (protocol != 0 && protocol != 1) || flags != 9 || class != dns.ClassINET || ttl != 1 {
+			if index < 1 || (protocol != 0 && protocol != 1) || flags != 9 || class != dns.ClassINET || (ttl != 1 && ttl != 5) {
 				return dbus.MakeFailedError(fmt.Errorf("invalid publication fields"))
 			}
 			if _, err := rawRecord(name, kind, raw); err != nil {
 				return dbus.MakeFailedError(err)
 			}
+			f.mu.Lock()
+			f.ttls = append(f.ttls, ttl)
+			f.mu.Unlock()
 			return nil
 		},
 		"Commit": func() *dbus.Error { defer f.wait()(); f.mu.Lock(); f.commits++; f.mu.Unlock(); return nil },
@@ -83,6 +87,74 @@ func (f *publicationFixture) newGroup() (dbus.ObjectPath, *dbus.Error) {
 		return "", dbus.MakeFailedError(err)
 	}
 	return path, nil
+}
+
+func TestPublisherLongLeaseTTLAndShortLeaseTransition(t *testing.T) {
+	path := privateBus(t)
+	f := publisherFixture(t, path, 0)
+	links := map[int]observation.Link{2: {Source: "lan-a", Generation: "link-a", Families: []int{4}}}
+	p, err := ConnectPublisher(
+		t.Context(),
+		path,
+		links,
+		func(context.Context, int, int, []catalog.Answer) error { return nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := p.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	rr, err := dns.NewRR("alias.local. 1 IN A 192.0.2.42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := Intent{
+		Interface: 2,
+		Family:    4,
+		Deadline:  catalog.Now().Mono + 20*time.Second,
+		Records:   []catalog.Answer{{RR: rr, Unique: true}},
+	}
+	if err := p.Reconcile(t.Context(), []Intent{intent}); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	ttl := f.ttls[0]
+	f.mu.Unlock()
+	if ttl != 5 {
+		t.Fatalf("long lease still generates TTL-one browse churn: ttl=%d", ttl)
+	}
+	p.mu.Lock()
+	deadline := p.groups[groupKey{index: 2, family: 4}].deadline
+	p.mu.Unlock()
+	if deadline+6*time.Second != intent.Deadline {
+		t.Fatal("advertisement can outlive evidence lease", deadline, intent.Deadline)
+	}
+	intent.Deadline = catalog.Now().Mono + 25*time.Second
+	if err := p.Reconcile(t.Context(), []Intent{intent}); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	commits := f.commits
+	f.mu.Unlock()
+	if commits != 1 {
+		t.Fatal("unchanged long lease was republished", commits)
+	}
+	intent.Deadline = catalog.Now().Mono + 8*time.Second
+	if err := p.Reconcile(t.Context(), []Intent{intent}); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	ttls, commits, resets := append([]uint32{}, f.ttls...), f.commits, f.resets
+	f.mu.Unlock()
+	if len(ttls) != 2 || ttls[1] != 1 || commits != 2 || resets != 1 {
+		t.Fatal("short lease did not replace the longer Avahi TTL", ttls, commits, resets)
+	}
+	if rr.Header().Ttl != 1 {
+		t.Fatal("publication changed the caller's record")
+	}
 }
 
 func TestPublisherParallelGroupsRenewalAndReplacementDeadlines(t *testing.T) {

@@ -222,6 +222,20 @@ func TestRawReceiverLeavesUDPPortOwnershipAndReassemblesFullPackets(t *testing.T
 					t.Error(err)
 				}
 			}()
+			// A transmitter must not accumulate unread copies of incoming UDP.
+			// The real receiver must still see the same fragmented response.
+			if _, err := producer.WriteToUDP(wire, &net.UDPAddr{IP: net.ParseIP(address), Port: 5353}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := receiver.Receive(); err != nil {
+				t.Fatal("receiver lost response while transmitter was open", err)
+			}
+			if err := sender.socket.SetReadDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := sender.socket.ReadFromIP(make([]byte, 9100)); !os.IsTimeout(err) {
+				t.Fatal("send-only raw socket queued an incoming packet", err)
+			}
 			var observer *Receiver
 			if err := peer.With(func() error {
 				var err error

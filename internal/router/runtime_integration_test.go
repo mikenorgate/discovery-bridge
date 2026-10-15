@@ -635,6 +635,29 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 	if burst {
 		// Startup bursts exercise the bounded queues independently of the
 		// short-lease lifecycle test. Cancellation must release blocked readers.
+		// Long evidence leases must reach both LAN families with the longer
+		// cache TTL, rather than merely changing publisher bookkeeping.
+		for _, receiver := range receivers {
+			if err := receiver.Socket.SetReadDeadline(time.Now().Add(4 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for !found {
+				packet, err := receiver.Receive()
+				if err != nil {
+					t.Fatal("long-lease LAN publication missing", err)
+				}
+				var response dns.Msg
+				if err := response.Unpack(packet.Wire); err != nil {
+					t.Fatal(err)
+				}
+				for _, rr := range response.Answer {
+					if rr.Header().Rrtype == dns.TypeSRV && rr.Header().Ttl == 5 && rr.Header().Class&0x8000 != 0 {
+						found = true
+					}
+				}
+			}
+		}
 		data, err := os.ReadFile(collector.log)
 		if err != nil || strings.Contains(string(data), `"event":"discovery_epoch_lost"`) {
 			t.Fatalf("discovery burst lost its observation epoch: %v\n%s", err, data)
@@ -699,7 +722,7 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 				t.Fatal(err)
 			}
 			for _, rr := range response.Answer {
-				if srv, ok := rr.(*dns.SRV); ok && srv.Port == 80 && srv.Hdr.Ttl == 1 && srv.Hdr.Class&0x8000 != 0 {
+				if srv, ok := rr.(*dns.SRV); ok && srv.Port == 80 && (srv.Hdr.Ttl == 1 || srv.Hdr.Ttl == 5) && srv.Hdr.Class&0x8000 != 0 {
 					found = true
 				}
 			}
@@ -801,7 +824,7 @@ func routerRuntimeLab(t *testing.T, burst bool) {
 				t.Fatal(err)
 			}
 			for _, rr := range answer.Answer {
-				if rr.Header().Rrtype == dns.TypeSRV && rr.Header().Ttl == 1 && rr.Header().Class&0x8000 != 0 {
+				if rr.Header().Rrtype == dns.TypeSRV && (rr.Header().Ttl == 1 || rr.Header().Ttl == 5) && rr.Header().Class&0x8000 != 0 {
 					found = true
 				}
 			}

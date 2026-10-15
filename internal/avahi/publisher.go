@@ -14,7 +14,10 @@ import (
 	"github.com/mikenorgate/discovery-bridge/internal/observation"
 )
 
-const groupInterface = service + ".EntryGroup"
+const (
+	groupInterface = service + ".EntryGroup"
+	publicationTTL = 5 * time.Second
+)
 
 // Intent carries a complete admitted group and an absolute Linux monotonic lease.
 type Intent struct {
@@ -180,6 +183,21 @@ func (p *Publisher) validate(intents []Intent, now time.Duration) (map[groupKey]
 			}
 		}
 		intent.Records = cloneAnswers(intent.Records)
+		ttl := uint32(1)
+		if intent.Deadline-now >= 2*publicationTTL {
+			ttl = uint32(publicationTTL / time.Second)
+			// Avahi does not age the configured TTL before replying. Stop
+			// advertising one whole TTL before the absolute evidence lease:
+			// even the last reply then expires by the original deadline.
+			// Short leases retain the existing TTL-one behavior. Their smaller
+			// TTL must replace the Avahi registration, not just its metadata.
+			// Keep another second for supervisor/daemon scheduling, rather than
+			// consuming all of the reserve with the client's cache lifetime.
+			intent.Deadline -= publicationTTL + time.Second
+		}
+		for _, record := range intent.Records {
+			record.RR.Header().Ttl = ttl
+		}
 		desired[key] = intent
 	}
 	return desired, nil
@@ -229,14 +247,16 @@ func (p *Publisher) Reconcile(ctx context.Context, intents []Intent) error {
 		return err
 	}
 	deadline := now + 3*time.Second
-	for _, intent := range intents {
+	for _, intent := range desired {
 		deadline = min(deadline, intent.Deadline)
 	}
 	var remove []func(context.Context) error
 	p.mu.Lock()
 	for key, previous := range p.groups {
 		intent, exists := desired[key]
-		if exists && slices.Equal(signature(previous.records), signature(intent.Records)) {
+		sameTTL := exists && len(intent.Records) > 0 &&
+			previous.records[0].RR.Header().Ttl == intent.Records[0].RR.Header().Ttl
+		if sameTTL && slices.Equal(signature(previous.records), signature(intent.Records)) {
 			previous.deadline = intent.Deadline
 			p.groups[key] = previous
 			continue
@@ -305,7 +325,19 @@ func (p *Publisher) Reconcile(ctx context.Context, intents []Intent) error {
 				if record.Unique {
 					flags = 9
 				}
-				if err := p.bus.call(ctx, path, groupInterface+".AddRecord", int32(key.index), protocol, flags, name, uint16(dns.ClassINET), record.RR.Header().Rrtype, uint32(1), raw).Err; err != nil {
+				if err := p.bus.call(
+					ctx,
+					path,
+					groupInterface+".AddRecord",
+					int32(key.index),
+					protocol,
+					flags,
+					name,
+					uint16(dns.ClassINET),
+					record.RR.Header().Rrtype,
+					record.RR.Header().Ttl,
+					raw,
+				).Err; err != nil {
 					return err
 				}
 			}
